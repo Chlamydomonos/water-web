@@ -1,0 +1,143 @@
+// ============================================================
+// CSS 自定义属性 — 亮色主题（默认）
+// ============================================================
+:root,
+[data-theme='light'] {
+    // ---- 基础色 ----
+    --color-bg: #ffffff;
+    --color-bg-secondary: #f5f5f5;
+    --color-text: #1a1a1a;
+    --color-text-secondary: #666666;
+    --color-text-muted: #999999;
+
+    // ---- 语义色 ----
+    --color-primary: #1677ff;
+    --color-primary-light: #e6f4ff;
+    --color-success: #52c41a;
+    --color-success-light: #f6ffed;
+    --color-warning: #faad14;
+    --color-warning-light: #fffbe6;
+    --color-danger: #ff4d4f;
+    --color-danger-light: #fff2f0;
+    --color-info: #1677ff;
+    --color-info-light: #e6f4ff;
+
+    // ---- 边框与分割线 ----
+    --color-border: #e5e5e5;
+    --color-border-light: #f0f0f0;
+
+    // ---- 卡片 ----
+    --card-bg: #ffffff;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --card-radius: 8px;
+
+    // ---- 图表 ----
+    --chart-line: #1677ff;
+    --chart-fill: rgba(22, 119, 255, 0.1);
+    --chart-grid: #f0f0f0;
+    --chart-axis: #999999;
+
+    // ---- 状态指示灯 ----
+    --dot-green: #52c41a;
+    --dot-red: #ff4d4f;
+    --dot-yellow: #faad14;
+
+    // ---- 横幅 ----
+    --banner-bg-info: #e6f4ff;
+    --banner-bg-warning: #fffbe6;
+    --banner-bg-danger: #fff2f0;
+    --banner-text-info: #1677ff;
+    --banner-text-warning: #d48806;
+    --banner-text-danger: #ff4d4f;
+
+    // ---- 进度条 ----
+    --progress-bg: #f0f0f0;
+    --progress-fill: #1677ff;
+    --progress-fill-paused: #faad14;
+
+    // ---- 阀门 ----
+    --valve-open: #52c41a;
+    --valve-closed: #999999;
+}
+
+// ============================================================
+// 暗色主题
+// ============================================================
+[data-theme='dark'] {
+    --color-bg: #141414;
+    --color-bg-secondary: #1f1f1f;
+    --color-text: #e8e8e8;
+    --color-text-secondary: #a0a0a0;
+    --color-text-muted: #666666;
+
+    --color-primary: #1677ff;
+    --color-primary-light: #111d32;
+    --color-success: #49aa19;
+    --color-success-light: #162312;
+    --color-warning: #d89614;
+    --color-warning-light: #2b2111;
+    --color-danger: #dc4446;
+    --color-danger-light: #2a1215;
+
+    --color-border: #333333;
+    --color-border-light: #262626;
+
+    --card-bg: #1f1f1f;
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+
+    --chart-line: #1677ff;
+    --chart-fill: rgba(22, 119, 255, 0.15);
+    --chart-grid: #262626;
+    --chart-axis: #666666;
+
+    --dot-green: #49aa19;
+    --dot-red: #dc4446;
+    --dot-yellow: #d89614;
+
+    --banner-bg-info: #111d32;
+    --banner-bg-warning: #2b2111;
+    --banner-bg-danger: #2a1215;
+    --banner-text-info: #1677ff;
+    --banner-text-warning: #d89614;
+    --banner-text-danger: #dc4446;
+
+    --progress-bg: #333333;
+    --progress-fill: #1677ff;
+    --progress-fill-paused: #d89614;
+
+    --valve-open: #49aa19;
+    --valve-closed: #666666;
+}
+
+// ============================================================
+// 布局变量
+// ============================================================
+:root {
+    --bp-mobile: 768px;
+    --content-max-width: 1200px;
+    --padding-pc: 24px;
+    --padding-mobile: 16px;
+
+    // 触控友好最小尺寸
+    --touch-min: 44px;
+
+    // 字体
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-size-xs: 12px;
+    --font-size-sm: 13px;
+    --font-size-md: 14px;
+    --font-size-lg: 16px;
+    --font-size-xl: 20px;
+    --font-size-xxl: 28px;
+
+    // 间距
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+
+    // 过渡
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.25s ease;
+}

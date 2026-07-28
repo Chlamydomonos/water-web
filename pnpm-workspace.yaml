@@ -1,0 +1,5 @@
+packages:
+  - packages/*
+allowBuilds:
+  fastify-socket.io: true
+  sqlite3: true

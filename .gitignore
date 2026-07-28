@@ -1,0 +1,4 @@
+external-docs
+node_modules
+dist
+*.sqlite

@@ -1,0 +1,10 @@
+{
+    "name": "water",
+    "private": true,
+    "scripts": {
+        "dev": "pnpm --parallel -r run dev",
+        "dev:frontend": "pnpm --filter frontend dev",
+        "dev:backend": "pnpm --filter backend dev",
+        "build": "pnpm --filter shared build && pnpm --parallel --filter backend --filter frontend build"
+    }
+}

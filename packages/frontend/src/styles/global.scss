@@ -1,0 +1,154 @@
+@use './variables.scss';
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    height: 100%;
+    font-family: var(--font-family);
+    font-size: var(--font-size-md);
+    color: var(--color-text);
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+    height: 100%;
+}
+
+// ============================================================
+// Element Plus 亮色主题覆盖
+// ============================================================
+
+// 暗色主题下 Element Plus 组件适配
+[data-theme='dark'] {
+    // el-table
+    .el-table {
+        --el-table-bg-color: var(--card-bg);
+        --el-table-tr-bg-color: var(--card-bg);
+        --el-table-header-bg-color: var(--color-bg-secondary);
+        --el-table-border-color: var(--color-border);
+        --el-table-text-color: var(--color-text);
+        --el-table-row-hover-bg-color: var(--color-bg-secondary);
+    }
+
+    // el-dialog
+    .el-dialog {
+        --el-dialog-bg-color: var(--card-bg);
+    }
+
+    // el-input
+    .el-input__wrapper {
+        background-color: var(--color-bg-secondary);
+        box-shadow: 0 0 0 1px var(--color-border) inset;
+    }
+
+    .el-input__inner {
+        color: var(--color-text);
+    }
+
+    // el-select
+    .el-select-dropdown {
+        background-color: var(--card-bg);
+    }
+
+    .el-select-dropdown__item {
+        color: var(--color-text);
+
+        &.hover,
+        &:hover {
+            background-color: var(--color-bg-secondary);
+        }
+    }
+
+    // el-tabs
+    .el-tabs__header {
+        border-bottom-color: var(--color-border);
+    }
+
+    // el-switch
+    .el-switch {
+        --el-switch-off-color: var(--color-border);
+    }
+
+    // el-button
+    .el-button--default {
+        --el-button-bg-color: var(--color-bg-secondary);
+        --el-button-border-color: var(--color-border);
+        --el-button-text-color: var(--color-text);
+    }
+
+    // el-date-picker
+    .el-picker-panel {
+        background-color: var(--card-bg);
+        color: var(--color-text);
+    }
+
+    .el-date-table td {
+        color: var(--color-text);
+    }
+}
+
+// ============================================================
+// Element Plus 通用覆盖
+// ============================================================
+
+// 表格条纹 & 圆角
+.el-table {
+    border-radius: var(--card-radius);
+    overflow: hidden;
+}
+
+// 对话框圆角
+.el-dialog {
+    border-radius: var(--card-radius);
+}
+
+// 卡片类组件统一样式
+.el-card {
+    border-radius: var(--card-radius);
+    border-color: var(--color-border);
+}
+
+// ============================================================
+// 滚动条美化
+// ============================================================
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+
+    &:hover {
+        background: var(--color-text-muted);
+    }
+}
+
+// ============================================================
+// 响应式工具类
+// ============================================================
+@media (max-width: 767px) {
+    .hide-on-mobile {
+        display: none !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .hide-on-pc {
+        display: none !important;
+    }
+}
