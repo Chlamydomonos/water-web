@@ -9,7 +9,7 @@ services:
       - ESP_PORT=${ESP_PORT:-8888}
       - DB_STORAGE=/app/data/data.sqlite
     volumes:
-      - backend-data:/app/data
+      - ./data:/app/data
 
   frontend:
     build:
@@ -20,7 +20,3 @@ services:
       - "3637:80"
     depends_on:
       - backend
-
-volumes:
-  backend-data:
-    driver: local
