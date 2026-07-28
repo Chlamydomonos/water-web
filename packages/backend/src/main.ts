@@ -30,6 +30,12 @@ async function main() {
     const app = Fastify({ logger: true });
     await app.register(fastifySocketIO.default);
 
+    // ── 健康检查端点（允许跨域，用于外部探活） ──
+    app.get('/api/health', async (_req, reply) => {
+        reply.header('Access-Control-Allow-Origin', '*');
+        return { status: 'ok', timestamp: Date.now() };
+    });
+
     // ── 4. 创建服务实例 ──
     const sensorService = new SensorService(tcpClient, app.io);
 
