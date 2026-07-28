@@ -59,6 +59,9 @@ function onTabClick(path: string) {
     border-bottom: 1px solid var(--color-border);
     gap: var(--space-lg);
     flex-shrink: 0;
+    // flex 项默认 min-width: auto 会阻止子项收缩，强制允许收缩并裁剪溢出
+    min-width: 0;
+    overflow: hidden;
 
     @media (max-width: 767px) {
         padding: 0 var(--padding-mobile);
@@ -79,12 +82,21 @@ function onTabClick(path: string) {
     display: flex;
     flex: 1;
     gap: var(--space-xs);
+    // 关键：允许 nav 收缩到小于其内容宽度，超出部分内部横向滚动
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
 }
 
 .top-bar__tab {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0; // 滚动容器内不被压扁，保证文字完整可滑出
     min-width: var(--touch-min);
     height: var(--touch-min);
     padding: 0 var(--space-md);

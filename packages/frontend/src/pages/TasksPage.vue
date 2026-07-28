@@ -478,6 +478,17 @@ onMounted(() => {
 
         <!-- 手动灌溉面板 -->
         <ManualIrrigationPanel :visible="manualPanelVisible" @close="manualPanelVisible = false" />
+
+        <!-- 移动端快捷操作栏 -->
+        <div class="quick-action-bar hide-on-pc">
+            <button
+                class="quick-action-bar__btn"
+                :disabled="!systemStore.espConnected"
+                @click="manualPanelVisible = true"
+            >
+                <el-icon class="btn-icon"><VideoPlay /></el-icon> 手动灌溉
+            </button>
+        </div>
     </div>
 </template>
 
@@ -489,6 +500,7 @@ onMounted(() => {
 
     @media (max-width: 767px) {
         padding: var(--padding-mobile);
+        padding-bottom: 80px; // 为移动端快捷操作栏留空间
     }
 }
 
@@ -806,6 +818,49 @@ onMounted(() => {
 .inline-icon {
     vertical-align: -0.15em;
     margin-right: 2px;
+}
+
+.btn-icon {
+    vertical-align: -0.15em;
+    margin-right: 4px;
+}
+// ============================================================
+// 移动端快捷操作栏 (与 DashboardPage 样式保持一致)
+// ============================================================
+.quick-action-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    padding: 8px var(--padding-mobile);
+    background: var(--card-bg);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    z-index: 50;
+}
+
+.quick-action-bar__btn {
+    width: 100%;
+    height: var(--touch-min);
+    border: none;
+    border-radius: 8px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity var(--transition-fast);
+
+    &:hover:not(:disabled) {
+        opacity: 0.85;
+    }
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
 }
 
 .btn-icon {

@@ -11,12 +11,17 @@
 html,
 body {
     height: 100%;
+    // 防止移动端因任何子元素横向溢出而触发整体自动缩放
+    overflow-x: hidden;
     font-family: var(--font-family);
     font-size: var(--font-size-md);
     color: var(--color-text);
     background: var(--color-bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    // 阻止移动端双指/双击缩放（与 viewport meta 配合）
+    -webkit-text-size-adjust: 100%;
+    touch-action: pan-x pan-y;
 }
 
 #app {

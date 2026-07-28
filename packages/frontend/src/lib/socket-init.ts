@@ -18,6 +18,12 @@ export function registerSocketEvents() {
         useSystemStore().handleSocketDisconnected();
     });
 
+    // 连接尝试失败（含后端不可达/CORS 被拒等）。首次连接若一直失败，
+    // socket.io 永远不会触发 disconnect，必须在此处理，否则 banner 不显示。
+    socket.on('connect_error', () => {
+        useSystemStore().handleSocketDisconnected();
+    });
+
     // ---- system 事件 ----
     socket.on('system:esp_connected', (data: { timestamp: number }) => {
         useSystemStore().handleEspConnected(data.timestamp);
@@ -60,6 +66,7 @@ export function registerSocketEvents() {
 export function unregisterSocketEvents() {
     socket.off('connect');
     socket.off('disconnect');
+    socket.off('connect_error');
     socket.off('system:esp_connected');
     socket.off('system:esp_disconnected');
     socket.off('valve:changed');
