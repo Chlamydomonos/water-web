@@ -8,5 +8,6 @@
     "editor.codeActionsOnSave": {
         "source.fixAll": "explicit"
     },
-    "cSpell.words": ["calib"]
+    "cSpell.words": ["calib"],
+    "docker.lsp.experimental.scout.criticalHighVulnerabilities": false
 }

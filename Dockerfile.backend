@@ -1,0 +1,38 @@
+# ── Stage 1: Build ──
+FROM node:24-alpine AS build
+
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# 复制 workspace 配置和 lockfile 以利用 Docker 层缓存
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/backend/package.json packages/backend/
+
+RUN pnpm install --frozen-lockfile
+
+# 复制源码并构建（仅复制必要文件，避免 pnpm symlink node_modules）
+COPY packages/shared/tsconfig.json packages/shared/
+COPY packages/shared/src packages/shared/src
+COPY packages/backend/tsconfig.json packages/backend/
+COPY packages/backend/src packages/backend/src
+RUN pnpm --filter shared build && pnpm --filter backend build
+
+# 为 pnpm deploy 临时启用 workspace 包注入（仅在构建容器内生效，不影响本地开发）
+RUN sed -i 's/^allowBuilds:/injectWorkspacePackages: true\nallowBuilds:/' pnpm-workspace.yaml
+
+# 使用 pnpm deploy 提取后端及其生产依赖到独立目录
+RUN pnpm --filter backend deploy --prod /deploy
+
+# ── Stage 2: Production ──
+FROM node:24-alpine
+
+WORKDIR /app
+
+COPY --from=build /deploy /app
+
+EXPOSE 3000
+
+CMD ["node", "dist/main.js"]

@@ -1,5 +1,7 @@
 packages:
   - packages/*
 allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true
   fastify-socket.io: true
   sqlite3: true
