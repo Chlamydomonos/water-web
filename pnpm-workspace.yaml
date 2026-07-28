@@ -5,3 +5,4 @@ allowBuilds:
   esbuild: true
   fastify-socket.io: true
   sqlite3: true
+  workerd: true
