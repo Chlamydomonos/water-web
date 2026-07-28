@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { useTaskStore } from '@/stores/tasks';
 import { useSystemStore } from '@/stores/system';
 import { useDataStore } from '@/stores/data';
@@ -62,6 +62,80 @@ function adjust(field: 'hours' | 'minutes' | 'seconds', delta: number) {
     const val = { hours, minutes, seconds };
     val[field].value = Math.max(0, Math.min(max, val[field].value + delta));
 }
+
+// ---- 按住拖动调整时间（移动端友好） ----
+// 通过监听 pointer 事件，根据垂直拖动距离按阈值改变对应字段。
+// 每跨越 MOVE_STEP px 触发一次 ±1，配 touch-action: none 防止页面滚动。
+const DRAG_MOVE_STEP = 24; // 每多少像素触发一次增减
+const dragState = ref<{
+    field: 'hours' | 'minutes' | 'seconds';
+    startY: number;
+    accumulated: number;
+    pointerId: number;
+} | null>(null);
+
+function onPickerPointerDown(e: PointerEvent, field: 'hours' | 'minutes' | 'seconds') {
+    // 仅在停止状态允许拖动；运行/暂停态数字不可交互
+    if (panelState.value !== 'ready') return;
+    // 排除右键
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+    // 阻止默认行为，避免触摸下触发滚动/选中文字
+    e.preventDefault();
+
+    dragState.value = {
+        field,
+        startY: e.clientY,
+        accumulated: 0,
+        pointerId: e.pointerId,
+    };
+
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    target.classList.add('picker-value--dragging');
+    window.addEventListener('pointermove', onPickerPointerMove);
+    window.addEventListener('pointerup', onPickerPointerUp, { once: true });
+    window.addEventListener('pointercancel', onPickerPointerUp, { once: true });
+}
+
+function onPickerPointerMove(e: PointerEvent) {
+    const state = dragState.value;
+    if (!state || e.pointerId !== state.pointerId) return;
+    e.preventDefault();
+
+    const deltaPx = state.startY - e.clientY; // 向上拖为正（增大）
+    // 以步长为单位累计，超出一个步长就调整一次并重置起点
+    while (Math.abs(deltaPx) - state.accumulated >= DRAG_MOVE_STEP) {
+        state.accumulated += DRAG_MOVE_STEP;
+        adjust(state.field, +1);
+    }
+    while (deltaPx - state.accumulated <= -DRAG_MOVE_STEP) {
+        state.accumulated -= DRAG_MOVE_STEP;
+        adjust(state.field, -1);
+    }
+}
+
+function onPickerPointerUp() {
+    const state = dragState.value;
+    if (!state) return;
+
+    window.removeEventListener('pointermove', onPickerPointerMove);
+
+    // 释放 pointer capture 与视觉态
+    document
+        .querySelectorAll('.picker-value--dragging')
+        .forEach((el) => (el as HTMLElement).releasePointerCapture?.(state.pointerId));
+    document.querySelectorAll('.picker-value--dragging').forEach((el) => el.classList.remove('picker-value--dragging'));
+
+    dragState.value = null;
+}
+
+// 组件卸载兜底：避免监听器残留
+onBeforeUnmount(() => {
+    window.removeEventListener('pointermove', onPickerPointerMove);
+    window.removeEventListener('pointerup', onPickerPointerUp);
+    window.removeEventListener('pointercancel', onPickerPointerUp);
+});
 
 // ---- 启动手动灌溉 ----
 const isStarting = ref(false);
@@ -150,7 +224,12 @@ watch(
                         <button class="picker-btn" @click="adjust('hours', 1)">
                             <el-icon><CaretTop /></el-icon>
                         </button>
-                        <div class="picker-value">{{ display.hours }}</div>
+                        <div
+                            class="picker-value picker-value--draggable"
+                            @pointerdown="onPickerPointerDown($event, 'hours')"
+                        >
+                            {{ display.hours }}
+                        </div>
                         <button class="picker-btn" @click="adjust('hours', -1)">
                             <el-icon><CaretBottom /></el-icon>
                         </button>
@@ -161,7 +240,12 @@ watch(
                         <button class="picker-btn" @click="adjust('minutes', 1)">
                             <el-icon><CaretTop /></el-icon>
                         </button>
-                        <div class="picker-value">{{ display.minutes }}</div>
+                        <div
+                            class="picker-value picker-value--draggable"
+                            @pointerdown="onPickerPointerDown($event, 'minutes')"
+                        >
+                            {{ display.minutes }}
+                        </div>
                         <button class="picker-btn" @click="adjust('minutes', -1)">
                             <el-icon><CaretBottom /></el-icon>
                         </button>
@@ -172,13 +256,19 @@ watch(
                         <button class="picker-btn" @click="adjust('seconds', 1)">
                             <el-icon><CaretTop /></el-icon>
                         </button>
-                        <div class="picker-value">{{ display.seconds }}</div>
+                        <div
+                            class="picker-value picker-value--draggable"
+                            @pointerdown="onPickerPointerDown($event, 'seconds')"
+                        >
+                            {{ display.seconds }}
+                        </div>
                         <button class="picker-btn" @click="adjust('seconds', -1)">
                             <el-icon><CaretBottom /></el-icon>
                         </button>
                         <span class="picker-label">秒</span>
                     </div>
                 </div>
+                <p class="manual-panel__picker-hint">提示：触屏可上下按住拖动数字调整</p>
 
                 <!-- 快捷预设 -->
                 <div class="manual-panel__presets">
@@ -407,6 +497,49 @@ watch(
     border: 1px solid var(--color-border);
     border-radius: 8px;
     margin: 4px 0;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+
+    // 可拖动状态（仅停止态向下能进入）
+    &--draggable {
+        // 允许捕获横向滑动/纵向拖拽时不被浏览器抢占用于滚动
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: grab;
+
+        @media (hover: hover) {
+            &:hover {
+                border-color: var(--color-primary);
+            }
+        }
+
+        &:active {
+            cursor: grabbing;
+        }
+
+        // 拖拽进行中的视觉反馈
+        &.picker-value--dragging {
+            cursor: grabbing;
+            background: var(--color-primary-light);
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+        }
+    }
+}
+
+// 拖动操作提示
+.manual-panel__picker-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin: 0 0 var(--space-sm);
+    text-align: center;
+
+    // PC 端隐藏（PC 有上下按钮足够）
+    @media (hover: hover) and (pointer: fine) {
+        display: none;
+    }
 }
 
 .picker-label {
@@ -466,7 +599,7 @@ watch(
 .manual-panel__countdown-label {
     font-size: var(--font-size-md);
     color: var(--color-text-muted);
-    margin-top: -var(--space-md);
+    margin-top: calc(-1 * var(--space-md));
 }
 
 // ---- 进度条 ----
@@ -494,7 +627,7 @@ watch(
 .manual-panel__progress-text {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
-    margin-top: -var(--space-md);
+    margin-top: calc(-1 * var(--space-md));
 }
 
 // ---- 信息区 ----
