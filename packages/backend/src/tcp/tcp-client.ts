@@ -12,6 +12,7 @@
  */
 
 import * as net from 'node:net';
+import { EventEmitter } from 'node:events';
 import { MAGIC, HEADER_SIZE, CRC_SIZE } from './types.js';
 import { readU16LE, writeU16LE, getStatusDescription } from './types.js';
 import { crc16 } from './crc16.js';
@@ -32,6 +33,14 @@ export interface TcpClientOptions {
     connectTimeout?: number;
     /** 命令响应超时 (毫秒), 默认 5000 */
     commandTimeout?: number;
+    /** 是否启用断线自动重连, 默认 false (手动模式) */
+    autoReconnect?: boolean;
+    /** 重连初始间隔 (毫秒), 默认 3000 */
+    reconnectInterval?: number;
+    /** 重连最大间隔 (毫秒), 默认 30000 */
+    reconnectMaxInterval?: number;
+    /** 重连最大次数 (0 = 无限), 默认 0 */
+    reconnectMaxAttempts?: number;
 }
 
 /**
@@ -65,6 +74,37 @@ export class TcpClient {
     /** 命令响应超时 */
     private readonly commandTimeout: number;
 
+    /** 是否启用自动重连 */
+    private readonly autoReconnect: boolean;
+
+    /** 重连初始间隔 */
+    private readonly reconnectInterval: number;
+
+    /** 重连最大间隔 */
+    private readonly reconnectMaxInterval: number;
+
+    /** 重连最大次数 (0 = 无限) */
+    private readonly reconnectMaxAttempts: number;
+
+    /** 事件分发器 (生命周期事件, 与具体 socket 解耦, 重连后监听器不丢失) */
+    private readonly emitter = new EventEmitter();
+
+    /** 重连定时器句柄 */
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    /** 当前重连尝试次数 (成功连接后归零) */
+    private reconnectAttempts = 0;
+
+    /** 是否处于主动断开中 (调用 disconnect 时置位, 抑制重连) */
+    private manualDisconnecting = false;
+
+    /** 内部事件常量 */
+    private static readonly EV_CONNECTED = 'connected';
+    private static readonly EV_DISCONNECTED = 'disconnected';
+    private static readonly EV_RECONNECTING = 'reconnecting';
+    private static readonly EV_RECONNECT_FAILED = 'reconnect_failed';
+    private static readonly EV_ERROR = 'error';
+
     /**
      * 创建 TcpClient 实例
      *
@@ -77,6 +117,10 @@ export class TcpClient {
         this.port = port;
         this.connectTimeout = options.connectTimeout ?? 5000;
         this.commandTimeout = options.commandTimeout ?? 5000;
+        this.autoReconnect = options.autoReconnect ?? false;
+        this.reconnectInterval = options.reconnectInterval ?? 3000;
+        this.reconnectMaxInterval = options.reconnectMaxInterval ?? 30000;
+        this.reconnectMaxAttempts = options.reconnectMaxAttempts ?? 0;
     }
 
     // ================================================================
@@ -89,19 +133,40 @@ export class TcpClient {
     }
 
     /**
-     * 注册 Socket 事件监听器
+     * 注册事件监听器
      *
-     * 支持的事件: 'close' | 'error'
-     * 注意: 'data' 事件由 TcpClient 内部管理，不应外部监听
+     * 支持的事件:
+     *   - 'connected'    : TCP 连接建立成功 (含重连成功)
+     *   - 'disconnected' : TCP 连接断开 (含被动断开)
+     *   - 'reconnecting' : 即将发起一次重连尝试 { attempt, delayMs }
+     *   - 'reconnect_failed': 重连最终失败 (达到最大次数)
+     *   - 'error'        : 底层 socket 错误
      */
-    on(event: 'close', listener: () => void): void;
-    on(event: 'error', listener: (err: Error) => void): void;
-    on(event: 'close' | 'error', listener: (...args: any[]) => void): void {
-        this.socket?.on(event, listener);
+    on(event: 'connected', listener: () => void): this;
+    on(event: 'disconnected', listener: () => void): this;
+    on(event: 'reconnecting', listener: (info: { attempt: number; delayMs: number }) => void): this;
+    on(event: 'reconnect_failed', listener: () => void): this;
+    on(event: 'error', listener: (err: Error) => void): this;
+    on(event: string, listener: (...args: any[]) => void): this {
+        this.emitter.on(event, listener);
+        return this;
+    }
+
+    /** 移除事件监听器 */
+    off(event: string, listener: (...args: any[]) => void): this {
+        this.emitter.off(event, listener);
+        return this;
+    }
+
+    /** 移除某事件全部监听器 (不传 event 则移除全部) */
+    removeAllListeners(event?: string): this {
+        if (event) this.emitter.removeAllListeners(event);
+        else this.emitter.removeAllListeners();
+        return this;
     }
 
     /**
-     * 建立 TCP 连接
+     * 建立 TCP 连接 (单次)
      *
      * @throws 连接超时或失败时抛出错误
      */
@@ -111,10 +176,15 @@ export class TcpClient {
                 return resolve();
             }
 
+            this.manualDisconnecting = false;
             const socket = new net.Socket();
             this.socket = socket;
             this.receiveBuffer = Buffer.alloc(0);
             this.seq = 0;
+
+            // 绑定被动断开/错误事件, 触发自动重连
+            socket.once('close', () => this.handleSocketClose());
+            socket.on('error', (err) => this.handleSocketError(err));
 
             const timeoutHandle = setTimeout(() => {
                 socket.destroy();
@@ -123,6 +193,8 @@ export class TcpClient {
 
             socket.connect(this.port, this.host, () => {
                 clearTimeout(timeoutHandle);
+                // 首次成功借由 connect() 的 resolve 通知调用方, 同时广播事件
+                this.onConnected();
                 resolve();
             });
 
@@ -134,14 +206,138 @@ export class TcpClient {
     };
 
     /**
-     * 断开 TCP 连接
+     * 自动模式入口: 发起首次连接, 失败时进入自动重连循环。
+     *
+     * 需要在构造时设置 autoReconnect: true。后续被动断开后会自动重连。
      */
-    disconnect = (): void => {
+    connectAuto = async (): Promise<void> => {
+        if (!this.autoReconnect) {
+            // 未启用自动重连时, 退化为单次连接
+            return this.connect();
+        }
+        try {
+            await this.connect();
+        } catch (err) {
+            // 首次失败也进入重连循环
+            this.scheduleReconnect();
+        }
+    };
+
+    /**
+     * 断开 TCP 连接 (主动), 触发后不再自动重连。
+     *
+     * @param reconnect 停止后是否仍允许后续被动事件触发重连。默认 false。
+     */
+    disconnect = (reconnect = false): void => {
+        this.manualDisconnecting = !reconnect;
+        this.clearReconnectTimer();
+        if (!reconnect) this.reconnectAttempts = 0;
+
         if (this.socket) {
+            // 主动销毁时移除我们注册的 close 监听, 避免触发 handleSocketClose
+            this.socket.removeAllListeners('close');
+            this.socket.removeAllListeners('error');
             this.socket.destroy();
             this.socket = null;
             this.receiveBuffer = Buffer.alloc(0);
         }
+    };
+
+    // ================================================================
+    // 自动重连内部实现
+    // ================================================================
+
+    /**
+     * 计算第 attempts 次重连的退避间隔 (指数退避 + 上限封顶)。 */
+    private computeBackoff(attempts: number): number {
+        const exp = this.reconnectInterval * Math.pow(2, attempts);
+        return Math.min(exp, this.reconnectMaxInterval);
+    }
+
+    /**
+     * 安排下次重连 (指数退避)。 */
+    private scheduleReconnect = (): void => {
+        if (!this.autoReconnect) return;
+        if (this.connected) return;
+
+        this.reconnectAttempts += 1;
+
+        if (this.reconnectMaxAttempts > 0 && this.reconnectAttempts > this.reconnectMaxAttempts) {
+            console.error(`[tcp] 重连已达上限 ${this.reconnectMaxAttempts} 次, 放弃重连`);
+            this.emitter.emit(TcpClient.EV_RECONNECT_FAILED);
+            this.reconnectAttempts = 0;
+            return;
+        }
+
+        const delayMs = this.computeBackoff(this.reconnectAttempts - 1);
+        const attempt = this.reconnectAttempts;
+        console.log(`[tcp] 将在 ${delayMs}ms 后进行第 ${attempt} 次重连 (上限 ${this.reconnectMaxAttempts || '∞'})`);
+        this.emitter.emit(TcpClient.EV_RECONNECTING, { attempt, delayMs });
+
+        this.clearReconnectTimer();
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            void this.reconnectOnce();
+        }, delayMs);
+    };
+
+    /**
+     * 执行一次重连尝试, 失败则继续退避。 */
+    private reconnectOnce = async (): Promise<void> => {
+        if (this.connected) return;
+        try {
+            await this.connect();
+        } catch (err) {
+            console.warn(`[tcp] 重连失败: ${(err as Error).message}`);
+            this.scheduleReconnect();
+        }
+    };
+
+    /** 取消挂起的重连定时器。 */
+    private clearReconnectTimer(): void {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+    }
+
+    /** 清理销毁/孤立的 socket 引用。 */
+    private cleanupSocket(): void {
+        if (this.socket) {
+            this.socket.removeAllListeners();
+            this.socket.destroy();
+            this.socket = null;
+        }
+        this.receiveBuffer = Buffer.alloc(0);
+    }
+
+    /**
+     * 连接成功后的公共处理: 重置计数, 广播 connected。 */
+    private onConnected(): void {
+        const wasReconnect = this.reconnectAttempts > 0;
+        this.reconnectAttempts = 0;
+        this.manualDisconnecting = false;
+        console.log('[tcp] ESP32 connected');
+        this.emitter.emit(TcpClient.EV_CONNECTED, { reconnected: wasReconnect });
+    }
+
+    /**
+     * 被动 close 事件处理。 */
+    private handleSocketClose = (): void => {
+        console.log('[tcp] ESP32 disconnected (socket close)');
+        this.cleanupSocket();
+        this.emitter.emit(TcpClient.EV_DISCONNECTED);
+
+        if (this.autoReconnect && !this.manualDisconnecting) {
+            this.scheduleReconnect();
+        }
+    };
+
+    /**
+     * 底层 error 事件处理 (仅记录/转发, close 事件会随后到达)。 */
+    private handleSocketError = (err: Error): void => {
+        console.error('[tcp] ESP32 socket error:', err.message);
+        this.emitter.emit(TcpClient.EV_ERROR, err);
     };
 
     // ================================================================

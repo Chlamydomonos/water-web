@@ -23,8 +23,13 @@ async function main() {
     await db.sync();
     console.log('[db] SQLite connected & models synced');
 
-    // ── 2. 创建 TCP 客户端 ──
-    const tcpClient = new TcpClient(ESP_HOST, ESP_PORT);
+    // ── 2. 创建 TCP 客户端 (启用断线自动重连) ──
+    const tcpClient = new TcpClient(ESP_HOST, ESP_PORT, {
+        autoReconnect: true,
+        reconnectInterval: 3000, // 初始 3s
+        reconnectMaxInterval: 30000, // 上限 30s
+        reconnectMaxAttempts: 0, // 无限重试
+    });
 
     // ── 3. 创建 Fastify + Socket.IO ──
     const app = Fastify({ logger: true });
@@ -86,70 +91,71 @@ async function main() {
     console.log(`[http] server listening on http://localhost:${port}`);
 
     // ── 6-9. 连接 ESP32 并启动采集 (异步，不阻塞 HTTP) ──
-    connectAndStartEsp(tcpClient, sensorService, dataService, irrigationTaskService, app.io);
+    bindEspLifecycle(tcpClient, sensorService, dataService, irrigationTaskService, app.io);
 }
 
 /**
- * 连接 ESP32 并依次执行:
- *   6. 连接 ESP32 (TCP)
- *   7. 校准 ESP32 时间
- *   8. 同步传感器屏蔽位图
- *   9. 启动 30s 数据采集定时器
+ * 绑定 ESP32 生命周期事件并发起首次连接。
  *
- * 失败时通过 Socket.IO 广播 system:error 事件，前端可据此显示连接状态。
+ * - 'connected'    : ESP32 上线 (首次或重连) → 同步屏蔽位图、启动调度器与采集
+ * - 'disconnected' : ESP32 下线 → 停止采集与调度器, 广播断开事件
+ * - 'reconnecting' : 即将重连 → 广播重连中事件
+ * - 'error'        : 底层错误 → 广播错误事件
  */
-async function connectAndStartEsp(
+function bindEspLifecycle(
     tcpClient: TcpClient,
     sensorService: SensorService,
     dataService: DataService,
     irrigationTaskService: IrrigationTaskService,
     io: SocketIOServer,
-): Promise<void> {
-    try {
-        console.log(`[tcp] connecting to ESP32 at ${ESP_HOST}:${ESP_PORT}...`);
-        await tcpClient.connect();
-
-        console.log('[tcp] ESP32 connected');
+): void {
+    tcpClient.on('connected', () => {
         io.emit('system:esp_connected', { timestamp: Date.now() });
 
-        // 同步屏蔽位图
-        await sensorService.syncMaskToEsp32();
+        // 同步屏蔽位图 (不阻塞启动流程, 失败仅记录)
+        sensorService.syncMaskToEsp32().catch((err) => console.error('[sensor] syncMaskToEsp32 failed:', err));
 
-        // 启动灌溉任务调度器 (ESP32 已就绪，串行化命令已就位)
+        // 启动灌溉任务调度器 (串行化命令已就位)
         irrigationTaskService.startScheduler();
 
         // 启动 30s 数据采集定时器 (内部会先校准时间)
         dataService.start();
+    });
 
-        // 监听 TCP 断开
-        tcpClient.on('close', () => {
-            console.log('[tcp] ESP32 disconnected');
-            dataService.stop();
-            irrigationTaskService.stopScheduler();
-            io.emit('system:esp_disconnected', {
-                timestamp: Date.now(),
-                reason: 'connection_closed',
-            });
-        });
-
-        tcpClient.on('error', (err: Error) => {
-            console.error('[tcp] ESP32 socket error:', err.message);
-            io.emit('system:error', {
-                code: 'ESP_CONNECTION_ERROR',
-                message: err.message,
-            });
-        });
-    } catch (err) {
-        console.error('[tcp] failed to connect to ESP32:', err);
+    tcpClient.on('disconnected', () => {
+        dataService.stop();
+        irrigationTaskService.stopScheduler();
         io.emit('system:esp_disconnected', {
             timestamp: Date.now(),
-            reason: String(err),
+            reason: 'connection_closed',
         });
+    });
+
+    tcpClient.on('reconnecting', (info: { attempt: number; delayMs: number }) => {
+        io.emit('system:error', {
+            code: 'ESP_RECONNECTING',
+            message: `ESP32 连接断开, 将在 ${Math.ceil(info.delayMs / 1000)}s 后重试 (第 ${info.attempt} 次)`,
+        });
+    });
+
+    tcpClient.on('error', (err: Error) => {
+        console.error('[tcp] ESP32 socket error:', err.message);
+        io.emit('system:error', {
+            code: 'ESP_CONNECTION_ERROR',
+            message: err.message,
+        });
+    });
+
+    // 发起首次连接 (失败后会自动进入重连循环)
+    console.log(`[tcp] connecting to ESP32 at ${ESP_HOST}:${ESP_PORT}...`);
+    void tcpClient.connectAuto().catch((err: unknown) => {
+        // connectAuto 内部已处理重连调度, 这里仅拦截未预期错误
+        console.error('[tcp] connectAuto 未预期错误:', err);
         io.emit('system:error', {
             code: 'ESP_NOT_CONNECTED',
-            message: '无法连接到 ESP32 设备，数据采集未启动',
+            message: '无法连接到 ESP32 设备, 进入自动重连',
         });
-    }
+    });
 }
 
 main().catch((err) => {
