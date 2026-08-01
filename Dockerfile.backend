@@ -31,6 +31,11 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+# 设置时区为东八区（后端 scheduleTimedTasks / cleanup 依赖 new Date().getHours() / getDay() 等本地时间，
+# Alpine 镜像默认为 UTC，需安装 tzdata 才能让 TZ 生效）
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Shanghai
+
 COPY --from=build /deploy /app
 
 EXPOSE 3000

@@ -53,9 +53,13 @@ const manualDuration = ref(300);
 const humidityLow = ref(30);
 const humidityHigh = ref(60);
 // 定时任务表单
-const timedStart = ref<Date | null>(null);
-const timedEnd = ref<Date | null>(null);
+const timedStart = ref<string | null>(null);
+const timedEnd = ref<string | null>(null);
 const timedDays = ref<boolean[]>([false, false, false, false, false, false, false]);
+
+// 定时任务"星期"编码映射：UI checkbox 下标 0..6 代表 [周一..周日]，
+// 而 daysOfWeek 与后端 Date.getDay() 保持一致 (0=周日..6=周六)
+const UI_INDEX_TO_DAY = [1, 2, 3, 4, 5, 6, 0] as const;
 
 const isEditing = computed(() => editingTask.value !== null);
 const dialogTitle = computed(() => {
@@ -119,12 +123,9 @@ function openEditDialog(task: IrrigationTaskDto) {
             humidityHigh.value = (task.config as HumidityTaskConfigDto).highThreshold;
         } else if (task.type === 'timed') {
             const tc = task.config as TimedTaskConfigDto;
-            const [sh, sm] = tc.startTime.split(':').map(Number);
-            const [eh, em] = tc.endTime.split(':').map(Number);
-            const today = new Date();
-            timedStart.value = new Date(today.getFullYear(), today.getMonth(), today.getDate(), sh, sm);
-            timedEnd.value = new Date(today.getFullYear(), today.getMonth(), today.getDate(), eh, em);
-            timedDays.value = Array.from({ length: 7 }, (_, i) => tc.daysOfWeek.includes(i));
+            timedStart.value = tc.startTime;
+            timedEnd.value = tc.endTime;
+            timedDays.value = UI_INDEX_TO_DAY.map((code) => tc.daysOfWeek.includes(code));
         }
     }
     dialogVisible.value = true;
@@ -147,16 +148,18 @@ async function submitForm() {
                 ElMessage.warning('请选择开始和结束时间');
                 return;
             }
-            const hhmm = (d: Date) =>
-                `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            const days = timedDays.value.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
+            const days: number[] = [];
+            timedDays.value.forEach((checked, i) => {
+                const code = UI_INDEX_TO_DAY[i];
+                if (checked && code !== undefined) days.push(code);
+            });
             if (days.length === 0) {
                 ElMessage.warning('请至少选择一个重复日');
                 return;
             }
             config = {
-                startTime: hhmm(timedStart.value),
-                endTime: hhmm(timedEnd.value),
+                startTime: timedStart.value,
+                endTime: timedEnd.value,
                 daysOfWeek: days,
             };
         }
@@ -257,7 +260,13 @@ function configSummary(task: IrrigationTaskDto) {
     }
     if (task.type === 'timed') {
         const tc = task.config as TimedTaskConfigDto;
-        const dayNames = tc.daysOfWeek.map((d) => dayLabels[d]).join('、');
+        // daysOfWeek 为 Date.getDay() 编码 (0=周日)，这里转回 UI 下标并按 周一..周日 顺序展示
+        const dayNames = tc.daysOfWeek
+            .map((d) => UI_INDEX_TO_DAY.indexOf(d as 0 | 1 | 2 | 3 | 4 | 5 | 6))
+            .filter((i): i is number => i >= 0)
+            .sort((a, b) => a - b)
+            .map((i) => dayLabels[i] ?? '')
+            .join('、');
         return `每天 ${tc.startTime}-${tc.endTime} ${dayNames}`;
     }
     return '';
