@@ -121,9 +121,11 @@ const chartOption = computed(() => {
     }
 
     const timestamps = points.map((p) => new Date(p.timestamp).toLocaleString('zh-CN'));
+    // 其他页面图表显示时将含水量截断到 [0, 100] 范围内（校准页面不截断）
+    const clampMoisture = (v: number | null): number | null => (v === null ? null : Math.max(0, Math.min(100, v)));
     const moistureData: [string, number | null][] = points.map((p) => [
         new Date(p.timestamp).toLocaleString('zh-CN'),
-        p.avgMoisture,
+        clampMoisture(p.avgMoisture),
     ]);
 
     const series: Array<{

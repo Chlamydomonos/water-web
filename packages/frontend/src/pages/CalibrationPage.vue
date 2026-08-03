@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElSteps, ElStep, ElInputNumber, ElTable, ElTableColumn, ElMessage, ElMessageBox, ElIcon } from 'element-plus';
+import {
+    ElSteps,
+    ElStep,
+    ElInputNumber,
+    ElTable,
+    ElTableColumn,
+    ElMessage,
+    ElMessageBox,
+    ElIcon,
+    ElRadio,
+    ElRadioGroup,
+} from 'element-plus';
 import { WarningFilled } from '@element-plus/icons-vue';
 import { api } from '@/lib/api';
 import { useDataStore } from '@/stores/data';
@@ -35,7 +46,12 @@ const calibrating = ref(false);
 
 // ---- 步骤 1: 输入实际含水量 ----
 const actualMoisture = ref<number>(25);
+// 输入模式: 'manual' 手动输入 | 'air' 暴露于空气中 (-50%)
+const inputMode = ref<'manual' | 'air'>('manual');
 const submitting = ref(false);
+
+/** 提交时使用的实际含水量值 (暴露于空气中时强制为 -50%) */
+const moistureToSubmit = computed(() => (inputMode.value === 'air' ? -50 : actualMoisture.value));
 const latestPulseCount = computed(() => {
     const snap = dataStore.latestSnapshot;
     if (!snap) return null;
@@ -44,12 +60,12 @@ const latestPulseCount = computed(() => {
 });
 
 async function submitDataPoint() {
-    if (actualMoisture.value == null) return;
+    if (moistureToSubmit.value == null) return;
     submitting.value = true;
     try {
         const res = await api.post<CalibrationPointDto>('/api/sensors/calibration/submit-data', {
             sensorId,
-            actualMoisture: actualMoisture.value,
+            actualMoisture: moistureToSubmit.value,
         });
         if (res.success) {
             points.value.push(res.data);
@@ -240,8 +256,20 @@ onBeforeUnmount(async () => {
 
                 <div class="calibration-step__input">
                     <label class="calibration-step__label">实际含水量 (%)</label>
-                    <ElInputNumber v-model="actualMoisture" :min="0" :max="150" style="width: 100%" />
-                    <span class="calibration-step__hint">输入烘干称重法测量的含水量</span>
+                    <ElInputNumber
+                        v-model="actualMoisture"
+                        :min="0"
+                        :max="150"
+                        :disabled="inputMode === 'air'"
+                        style="width: 100%"
+                    />
+                    <ElRadioGroup v-model="inputMode" class="calibration-step__mode">
+                        <ElRadio value="manual">手动输入</ElRadio>
+                        <ElRadio value="air">暴露于空气中 (含水量 -50%)</ElRadio>
+                    </ElRadioGroup>
+                    <span class="calibration-step__hint">
+                        {{ inputMode === 'air' ? '传感器暴露于空气中，含水量恒为 -50%' : '输入烘干称重法测量的含水量' }}
+                    </span>
                 </div>
 
                 <button

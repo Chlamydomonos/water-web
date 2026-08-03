@@ -16,8 +16,12 @@ export const useDataStore = defineStore('data', () => {
     });
     const latestMoisture = computed<number | null>(() => latestSnapshot.value?.avgMoisture ?? null);
 
+    // 仪表盘 / 历史等其他页面图表显示时将含水量截断到 [0, 100] 范围内
+    // （校准页面不截断，以显示原始测量值）
+    const clampMoisture = (v: number | null): number | null => (v === null ? null : Math.max(0, Math.min(100, v)));
+
     const chartMoistureSeries = computed(() =>
-        dataBuffer.value.map((d) => [String(d.timestamp), d.avgMoisture] as [string, number | null]),
+        dataBuffer.value.map((d) => [String(d.timestamp), clampMoisture(d.avgMoisture)] as [string, number | null]),
     );
     const chartValveSeries = computed(() =>
         dataBuffer.value.map((d) => [String(d.timestamp), d.valveState] as [string, 0 | 1]),
