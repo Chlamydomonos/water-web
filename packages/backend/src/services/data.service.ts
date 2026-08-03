@@ -177,12 +177,14 @@ export class DataService {
             // CRC-8 简单校验: 非零即为有效 (ESP32 端计算)
             const crc8Valid = slaveData.crc8 !== 0;
 
-            // 已校准传感器进行脉冲→含水量转换
+            // 已校准传感器进行脉冲→含水量转换: y = a * ln(1000/x) + b
             let moisture: number | null = null;
-            if (sensor.calibrated === 1 && sensor.calibSlope != null && sensor.calibIntercept != null) {
-                moisture = sensor.calibSlope * pulseCount + sensor.calibIntercept;
-                if (crc8Valid) {
-                    moistureValues.push(moisture);
+            if (sensor.calibrated === 1 && sensor.calibA != null && sensor.calibB != null) {
+                if (pulseCount > 0 && pulseCount < 1500) {
+                    moisture = sensor.calibA * Math.log(1000 / pulseCount) + sensor.calibB;
+                    if (crc8Valid) {
+                        moistureValues.push(moisture);
+                    }
                 }
             }
 

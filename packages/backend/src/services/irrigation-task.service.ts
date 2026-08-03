@@ -420,9 +420,19 @@ export class IrrigationTaskService {
             },
         });
 
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
         for (const task of humidityTasks) {
             const config = await HumidityTaskConfig.findByPk(task.id);
             if (!config) continue;
+
+            const configDto: HumidityTaskConfigDto = {
+                lowThreshold: config.lowThreshold,
+                highThreshold: config.highThreshold,
+                startTime: config.startTime,
+                endTime: config.endTime,
+            };
 
             // 全传感器故障 → 暂停
             if (healthyCount === 0) {
@@ -430,13 +440,7 @@ export class IrrigationTaskService {
                     task.state = 'paused';
                     task.suspendedByTaskId = null; // 系统暂停
                     await task.save();
-                    this.io.emit(
-                        'task:changed',
-                        toTaskDto(task, {
-                            lowThreshold: config.lowThreshold,
-                            highThreshold: config.highThreshold,
-                        }),
-                    );
+                    this.io.emit('task:changed', toTaskDto(task, configDto));
                     console.log(`[task] humidity #${task.id} paused (no healthy sensors)`);
                 }
                 continue;
@@ -444,37 +448,35 @@ export class IrrigationTaskService {
 
             const avgMoisture = this.dataService.getLastAvgMoisture();
 
+            // 判断是否设置了时间阈值
+            const hasTimeWindow = config.startTime !== null && config.endTime !== null;
+            const inTimeWindow = hasTimeWindow
+                ? this.isInTimeWindow(currentMinutes, config.startTime!, config.endTime!)
+                : true;
+
             if (task.state === 'idle') {
-                // 有健康传感器 + 低于阈值 → 启动
-                if (avgMoisture !== null && avgMoisture < config.lowThreshold) {
+                // 有健康传感器 + 低于阈值 + 在时间窗口内(若设置) → 启动
+                if (avgMoisture !== null && avgMoisture < config.lowThreshold && inTimeWindow) {
                     task.state = 'running';
                     task.startedAt = new Date();
                     task.suspendedByTaskId = null;
                     await task.save();
-                    this.io.emit(
-                        'task:changed',
-                        toTaskDto(task, {
-                            lowThreshold: config.lowThreshold,
-                            highThreshold: config.highThreshold,
-                        }),
-                    );
+                    this.io.emit('task:changed', toTaskDto(task, configDto));
                     console.log(
-                        `[task] humidity #${task.id} started (moisture ${avgMoisture} < ${config.lowThreshold})`,
+                        `[task] humidity #${task.id} started (moisture ${avgMoisture} < ${config.lowThreshold}` +
+                            (hasTimeWindow ? `, in window ${config.startTime}-${config.endTime}` : '') +
+                            `)`,
                     );
                 }
             } else if (task.state === 'running') {
-                // 高于阈值 → 完成
+                // 停止条件: 高于阈值 → 完成
+                // 注: 时间窗口仅限制灌溉启动时机，不强制停止已运行的灌溉——
+                //     一旦启动，会持续灌溉直到湿度达标，避免半途灌溉导致土壤干湿交替
                 if (avgMoisture !== null && avgMoisture > config.highThreshold) {
                     task.state = 'completed';
                     task.endedAt = new Date();
                     await task.save();
-                    this.io.emit(
-                        'task:changed',
-                        toTaskDto(task, {
-                            lowThreshold: config.lowThreshold,
-                            highThreshold: config.highThreshold,
-                        }),
-                    );
+                    this.io.emit('task:changed', toTaskDto(task, configDto));
                     console.log(
                         `[task] humidity #${task.id} completed (moisture ${avgMoisture} > ${config.highThreshold})`,
                     );
@@ -487,13 +489,7 @@ export class IrrigationTaskService {
                 if (avgMoisture !== null && task.suspendedByTaskId === null) {
                     task.state = 'idle';
                     await task.save();
-                    this.io.emit(
-                        'task:changed',
-                        toTaskDto(task, {
-                            lowThreshold: config.lowThreshold,
-                            highThreshold: config.highThreshold,
-                        }),
-                    );
+                    this.io.emit('task:changed', toTaskDto(task, configDto));
                 }
             }
         }
@@ -728,7 +724,14 @@ export class IrrigationTaskService {
             }
             case 'humidity': {
                 const c = await HumidityTaskConfig.findByPk(task.id);
-                return c ? { lowThreshold: c.lowThreshold, highThreshold: c.highThreshold } : null;
+                return c
+                    ? {
+                          lowThreshold: c.lowThreshold,
+                          highThreshold: c.highThreshold,
+                          startTime: c.startTime,
+                          endTime: c.endTime,
+                      }
+                    : null;
             }
             case 'timed': {
                 const c = await TimedTaskConfig.findByPk(task.id);
@@ -762,6 +765,8 @@ export class IrrigationTaskService {
                     taskId,
                     lowThreshold: c.lowThreshold,
                     highThreshold: c.highThreshold,
+                    startTime: c.startTime ?? null,
+                    endTime: c.endTime ?? null,
                 });
                 break;
             }
@@ -812,6 +817,23 @@ export class IrrigationTaskService {
                 }
                 if (c.lowThreshold >= c.highThreshold) {
                     throw new TaskError('VALIDATION_ERROR', 'lowThreshold 必须小于 highThreshold');
+                }
+                // 时间阈值可选，但若提供则必须同时提供 startTime 和 endTime 且格式正确
+                if (c.startTime !== undefined && c.startTime !== null) {
+                    if (c.endTime === undefined || c.endTime === null) {
+                        throw new TaskError('VALIDATION_ERROR', '设置 startTime 时必须同时设置 endTime');
+                    }
+                    if (!/^\d{2}:\d{2}$/.test(c.startTime) || !/^\d{2}:\d{2}$/.test(c.endTime)) {
+                        throw new TaskError('VALIDATION_ERROR', '时间格式必须为 HH:mm');
+                    }
+                    if (c.startTime === c.endTime) {
+                        throw new TaskError('VALIDATION_ERROR', 'startTime 不能等于 endTime');
+                    }
+                }
+                if (c.endTime !== undefined && c.endTime !== null) {
+                    if (c.startTime === undefined || c.startTime === null) {
+                        throw new TaskError('VALIDATION_ERROR', '设置 endTime 时必须同时设置 startTime');
+                    }
                 }
                 break;
             }
@@ -898,6 +920,23 @@ export class IrrigationTaskService {
     private parseTimeToMinutes(time: string): number {
         const [h, m] = time.split(':').map(Number);
         return h! * 60 + m!;
+    }
+
+    /**
+     * 判断当前分钟数是否在时间窗口 [startTime, endTime) 内。
+     * 支持跨 0 点：如 startTime="16:00", endTime="08:00" 表示 16:00 ~ 次日 08:00。
+     */
+    private isInTimeWindow(currentMinutes: number, startTime: string, endTime: string): boolean {
+        const start = this.parseTimeToMinutes(startTime);
+        const end = this.parseTimeToMinutes(endTime);
+
+        if (start <= end) {
+            // 不跨天: 如 08:00 ~ 16:00
+            return currentMinutes >= start && currentMinutes < end;
+        } else {
+            // 跨天: 如 16:00 ~ 次日 08:00
+            return currentMinutes >= start || currentMinutes < end;
+        }
     }
 
     private rangesOverlap(s1: number, e1: number, s2: number, e2: number): boolean {

@@ -47,10 +47,10 @@ export class Sensor extends Model<InferAttributes<Sensor>, InferCreationAttribut
     declare calibrated: CreationOptional<0 | 1>;
 
     @Attribute(DataTypes.DOUBLE)
-    declare calibSlope: number | null;
+    declare calibA: number | null;
 
     @Attribute(DataTypes.DOUBLE)
-    declare calibIntercept: number | null;
+    declare calibB: number | null;
 
     @Attribute(DataTypes.DATE)
     @NotNull

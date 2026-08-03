@@ -37,8 +37,8 @@ function toSensorDto(s: Sensor): SensorDto {
         name: s.name,
         faulty: s.faulty === 1,
         calibrated: s.calibrated === 1,
-        calibSlope: s.calibSlope ?? null,
-        calibIntercept: s.calibIntercept ?? null,
+        calibA: s.calibA ?? null,
+        calibB: s.calibB ?? null,
         createdAt: s.createdAt.toISOString(),
     };
 }
@@ -206,37 +206,38 @@ export class SensorService {
             throw new CalibrationError('INSUFFICIENT_CALIB_DATA', '至少需要 2 个校准数据点');
         }
 
-        // 最小二乘线性回归
+        // 对数回归: y = a * ln(1000/x) + b
+        // 令 u = ln(1000/x) = ln(1000) - ln(x)，线性化为 y = a*u + b，用最小二乘法求解
         const n = points.length;
-        const xs = points.map((p) => p.pulseCount);
+        const us = points.map((p) => Math.log(1000 / p.pulseCount));
         const ys = points.map((p) => p.actualMoisture);
-        const sumX = xs.reduce((a, b) => a + b, 0);
+        const sumU = us.reduce((a, b) => a + b, 0);
         const sumY = ys.reduce((a, b) => a + b, 0);
-        const sumXY = xs.reduce((sum, x, i) => sum + x * ys[i]!, 0);
-        const sumX2 = xs.reduce((sum, x) => sum + x * x, 0);
+        const sumUY = us.reduce((sum, u, i) => sum + u * ys[i]!, 0);
+        const sumU2 = us.reduce((sum, u) => sum + u * u, 0);
 
-        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-        const intercept = (sumY - slope * sumX) / n;
+        const a = (n * sumUY - sumU * sumY) / (n * sumU2 - sumU * sumU);
+        const b = (sumY - a * sumU) / n;
 
         // R²
         const meanY = sumY / n;
         const ssRes = ys.reduce((sum, y, i) => {
-            const predicted = slope * xs[i]! + intercept;
+            const predicted = a * us[i]! + b;
             return sum + (y - predicted) ** 2;
         }, 0);
         const ssTot = ys.reduce((sum, y) => sum + (y - meanY) ** 2, 0);
         const rSquared = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
 
         // 写入传感器校准参数
-        sensor.calibSlope = slope;
-        sensor.calibIntercept = intercept;
+        sensor.calibA = a;
+        sensor.calibB = b;
         sensor.calibrated = 1;
         await sensor.save();
 
         // 推送传感器变更事件
         this.io?.emit('sensor:changed', toSensorDto(sensor));
 
-        return { slope, intercept, rSquared, pointCount: n };
+        return { a, b, rSquared, pointCount: n };
     }
 
     async calibrationStatus(sensorId: number): Promise<CalibrationStatusResponse> {
@@ -251,8 +252,8 @@ export class SensorService {
         });
 
         const formula: CalibrationFormula | null =
-            sensor.calibrated === 1 && sensor.calibSlope != null && sensor.calibIntercept != null
-                ? { slope: sensor.calibSlope, intercept: sensor.calibIntercept }
+            sensor.calibrated === 1 && sensor.calibA != null && sensor.calibB != null
+                ? { a: sensor.calibA, b: sensor.calibB }
                 : null;
 
         return {

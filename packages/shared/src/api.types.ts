@@ -27,8 +27,8 @@ export interface SensorDto {
     name: string;
     faulty: boolean;
     calibrated: boolean;
-    calibSlope: number | null;
-    calibIntercept: number | null;
+    calibA: number | null;
+    calibB: number | null;
     createdAt: string;
 }
 
@@ -68,8 +68,8 @@ export interface CalibrationPointDto {
 }
 
 export interface CalibrationFormula {
-    slope: number;
-    intercept: number;
+    a: number;
+    b: number;
 }
 
 export interface CalibrationStatusResponse {
@@ -81,8 +81,8 @@ export interface CalibrationStatusResponse {
 }
 
 export interface CalibrationCalculateResponse {
-    slope: number;
-    intercept: number;
+    a: number;
+    b: number;
     rSquared: number;
     pointCount: number;
 }
@@ -174,6 +174,9 @@ export interface ManualTaskConfigDto {
 export interface HumidityTaskConfigDto {
     lowThreshold: number;
     highThreshold: number;
+    /** 时间阈值（可选）。设置后仅在此时间窗口内且湿度低于阈值才灌溉。支持跨 0 点。 */
+    startTime?: string | null; // "HH:mm"
+    endTime?: string | null; // "HH:mm"
 }
 
 export interface TimedTaskConfigDto {

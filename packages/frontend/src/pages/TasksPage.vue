@@ -52,6 +52,9 @@ const manualDuration = ref(300);
 // 湿度任务表单
 const humidityLow = ref(30);
 const humidityHigh = ref(60);
+const humidityStartTime = ref<string | null>(null);
+const humidityEndTime = ref<string | null>(null);
+const humidityTimeEnabled = ref(false);
 // 定时任务表单
 const timedStart = ref<string | null>(null);
 const timedEnd = ref<string | null>(null);
@@ -106,6 +109,9 @@ function openCreateDialog(type: TaskType) {
     manualDuration.value = 300;
     humidityLow.value = 30;
     humidityHigh.value = 60;
+    humidityStartTime.value = null;
+    humidityEndTime.value = null;
+    humidityTimeEnabled.value = false;
     timedStart.value = null;
     timedEnd.value = null;
     timedDays.value = [false, false, false, false, false, false, false];
@@ -119,8 +125,18 @@ function openEditDialog(task: IrrigationTaskDto) {
         if (task.type === 'manual') {
             manualDuration.value = (task.config as ManualTaskConfigDto).durationSeconds;
         } else if (task.type === 'humidity') {
-            humidityLow.value = (task.config as HumidityTaskConfigDto).lowThreshold;
-            humidityHigh.value = (task.config as HumidityTaskConfigDto).highThreshold;
+            const hc = task.config as HumidityTaskConfigDto;
+            humidityLow.value = hc.lowThreshold;
+            humidityHigh.value = hc.highThreshold;
+            if (hc.startTime && hc.endTime) {
+                humidityTimeEnabled.value = true;
+                humidityStartTime.value = hc.startTime;
+                humidityEndTime.value = hc.endTime;
+            } else {
+                humidityTimeEnabled.value = false;
+                humidityStartTime.value = null;
+                humidityEndTime.value = null;
+            }
         } else if (task.type === 'timed') {
             const tc = task.config as TimedTaskConfigDto;
             timedStart.value = tc.startTime;
@@ -142,7 +158,22 @@ async function submitForm() {
                 ElMessage.warning('停止阈值必须大于启动阈值');
                 return;
             }
-            config = { lowThreshold: humidityLow.value, highThreshold: humidityHigh.value };
+            config = {
+                lowThreshold: humidityLow.value,
+                highThreshold: humidityHigh.value,
+            };
+            if (humidityTimeEnabled.value) {
+                if (!humidityStartTime.value || !humidityEndTime.value) {
+                    ElMessage.warning('请选择时间阈值的开始和结束时间');
+                    return;
+                }
+                if (humidityStartTime.value === humidityEndTime.value) {
+                    ElMessage.warning('时间阈值的开始和结束时间不能相同');
+                    return;
+                }
+                config.startTime = humidityStartTime.value;
+                config.endTime = humidityEndTime.value;
+            }
         } else {
             if (!timedStart.value || !timedEnd.value) {
                 ElMessage.warning('请选择开始和结束时间');
@@ -256,7 +287,11 @@ function configSummary(task: IrrigationTaskDto) {
     }
     if (task.type === 'humidity') {
         const hc = task.config as HumidityTaskConfigDto;
-        return `阈值 ${hc.lowThreshold}% → ${hc.highThreshold}%`;
+        let summary = `阈值 ${hc.lowThreshold}% → ${hc.highThreshold}%`;
+        if (hc.startTime && hc.endTime) {
+            summary += `，仅 ${hc.startTime}-${hc.endTime}`;
+        }
+        return summary;
     }
     if (task.type === 'timed') {
         const tc = task.config as TimedTaskConfigDto;
@@ -452,6 +487,30 @@ onMounted(() => {
                     <label class="tasks-page__form-label">停止阈值 (%)</label>
                     <ElInputNumber v-model="humidityHigh" :min="0" :max="100" style="width: 100%" />
                     <span class="tasks-page__form-hint">含水量高于此值时停止灌溉（必须大于启动阈值）</span>
+
+                    <ElCheckbox v-model="humidityTimeEnabled" label="启用时间阈值" />
+                    <span class="tasks-page__form-hint">启用后，仅在指定时间窗口内且湿度低于阈值才灌溉</span>
+
+                    <template v-if="humidityTimeEnabled">
+                        <label class="tasks-page__form-label">时间窗口开始</label>
+                        <ElTimePicker
+                            v-model="humidityStartTime"
+                            format="HH:mm"
+                            value-format="HH:mm"
+                            placeholder="如 16:00"
+                            style="width: 100%"
+                        />
+
+                        <label class="tasks-page__form-label">时间窗口结束</label>
+                        <ElTimePicker
+                            v-model="humidityEndTime"
+                            format="HH:mm"
+                            value-format="HH:mm"
+                            placeholder="如 08:00（可跨 0 点）"
+                            style="width: 100%"
+                        />
+                        <span class="tasks-page__form-hint">支持跨 0 点，如 16:00 ~ 次日 08:00</span>
+                    </template>
                 </template>
 
                 <!-- 定时任务 -->

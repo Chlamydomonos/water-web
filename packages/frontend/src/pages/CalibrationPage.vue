@@ -29,7 +29,7 @@ const sensorName = ref('');
 
 // ---- 校准状态 ----
 const points = ref<CalibrationPointDto[]>([]);
-const formula = ref<{ slope: number; intercept: number } | null>(null);
+const formula = ref<{ a: number; b: number } | null>(null);
 const rSquared = ref<number | null>(null);
 const calibrating = ref(false);
 
@@ -90,7 +90,7 @@ async function doCalculate() {
             sensorId,
         });
         if (res.success) {
-            formula.value = { slope: res.data.slope, intercept: res.data.intercept };
+            formula.value = { a: res.data.a, b: res.data.b };
             rSquared.value = res.data.rSquared;
             ElMessage.success('计算完成');
         } else {
@@ -107,6 +107,15 @@ const fitLineOption = computed(() => {
     const xMin = Math.min(...points.value.map((p) => p.pulseCount));
     const xMax = Math.max(...points.value.map((p) => p.pulseCount));
     const f = formula.value;
+    // 对数曲线 y = a * ln(1000/x) + b，在 [xMin, xMax] 范围内采样
+    const curveData: [number, number][] = [];
+    const steps = 50;
+    for (let i = 0; i <= steps; i++) {
+        const x = xMin + ((xMax - xMin) * i) / steps;
+        if (x > 0 && x < 1500) {
+            curveData.push([x, f.a * Math.log(1000 / x) + f.b]);
+        }
+    }
     return {
         grid: { top: 16, right: 16, bottom: 36, left: 48 },
         xAxis: { type: 'value' as const, name: '脉冲计数' },
@@ -120,10 +129,7 @@ const fitLineOption = computed(() => {
             },
             {
                 type: 'line' as const,
-                data: [
-                    [xMin, f.slope * xMin + f.intercept],
-                    [xMax, f.slope * xMax + f.intercept],
-                ],
+                data: curveData,
                 lineStyle: { color: 'var(--color-danger)', type: 'dashed' as const },
                 symbol: 'none' as const,
             },
@@ -234,7 +240,7 @@ onBeforeUnmount(async () => {
 
                 <div class="calibration-step__input">
                     <label class="calibration-step__label">实际含水量 (%)</label>
-                    <ElInputNumber v-model="actualMoisture" :min="0" :max="100" style="width: 100%" />
+                    <ElInputNumber v-model="actualMoisture" :min="0" :max="150" style="width: 100%" />
                     <span class="calibration-step__hint">输入烘干称重法测量的含水量</span>
                 </div>
 
@@ -300,8 +306,8 @@ onBeforeUnmount(async () => {
 
                 <div v-if="formula" class="calibration-step__result">
                     <p class="calibration-step__formula">
-                        公式: 含水量 = {{ formula.slope.toFixed(4) }} × 脉冲
-                        <template v-if="formula.intercept >= 0">+</template>{{ formula.intercept.toFixed(1) }}
+                        公式: 含水量 = {{ formula.a.toFixed(4) }} × ln(1000 / 脉冲)
+                        <template v-if="formula.b >= 0">+</template>{{ formula.b.toFixed(1) }}
                     </p>
                     <p class="calibration-step__rsquared">R² = {{ rSquared?.toFixed(3) ?? '—' }}</p>
                     <p class="calibration-step__point-count">数据点: {{ points.length }}</p>
@@ -328,8 +334,8 @@ onBeforeUnmount(async () => {
                 <div class="calibration-step__confirm-card">
                     <p><strong>传感器:</strong> {{ sensorName || `#${sensorId}` }}</p>
                     <p v-if="formula">
-                        <strong>拟合公式:</strong> 含水量 = {{ formula.slope.toFixed(4) }} × 脉冲
-                        <template v-if="formula.intercept >= 0">+</template>{{ formula.intercept.toFixed(1) }}
+                        <strong>拟合公式:</strong> 含水量 = {{ formula.a.toFixed(4) }} × ln(1000 / 脉冲)
+                        <template v-if="formula.b >= 0">+</template>{{ formula.b.toFixed(1) }}
                     </p>
                     <p v-if="rSquared !== null"><strong>R²:</strong> {{ rSquared.toFixed(3) }}</p>
                 </div>
