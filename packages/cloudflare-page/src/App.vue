@@ -4,7 +4,7 @@ import { ref, onMounted } from 'vue';
 /** 目标后端 IP 列表，会依次尝试 /api/health */
 const TARGETS = [
     { host: '192.168.0.25', port: 3637 },
-    { host: '172.30.0.1', port: 3637 },
+    { host: '10.13.16.1', port: 3637 },
 ] as const;
 
 const state = ref<'probing' | 'unreachable'>('probing');
