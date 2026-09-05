@@ -13,6 +13,7 @@ import { RawSensorReading } from '../db/models/RawSensorReading.js';
 import { AggregatedData } from '../db/models/AggregatedData.js';
 import { Sensor } from '../db/models/Sensor.js';
 import { DelayQueue } from './delay-queue.js';
+import { isDebugMode } from './sensor.service.js';
 import { Op } from '@sequelize/core';
 import type { DataSnapshot, SensorSnapshot, DataPoint, RawReadingDetail } from 'shared';
 
@@ -136,10 +137,11 @@ export class DataService {
 
     /**
      * 构建 slaveAddr → Sensor 映射表
-     * 仅包含健康 (非故障) 的传感器
+     * 正常模式: 仅包含健康 (非故障) 的传感器
+     * 调试模式: 包含所有已注册传感器 (含故障)，未注册的地址用合成条目填充
      */
     private async buildSensorMap(): Promise<Map<number, Sensor>> {
-        const sensors = await Sensor.findAll({ where: { faulty: 0 } });
+        const sensors = isDebugMode() ? await Sensor.findAll() : await Sensor.findAll({ where: { faulty: 0 } });
         const map = new Map<number, Sensor>();
         for (const s of sensors) {
             map.set(s.slaveAddr, s);
@@ -169,13 +171,26 @@ export class DataService {
 
         for (let slaveAddr = 0; slaveAddr < entry.slaves.length; slaveAddr++) {
             const sensor = sensorMap.get(slaveAddr);
-            if (!sensor) continue; // 未添加或故障的传感器不处理
-
             const slaveData = entry.slaves[slaveAddr]!;
             const pulseCount = slaveData.pulseCount;
 
             // CRC-8 简单校验: 非零即为有效 (ESP32 端计算)
             const crc8Valid = slaveData.crc8 !== 0;
+
+            if (!sensor) {
+                // 调试模式下，未注册的传感器也输出脉冲计数
+                if (isDebugMode()) {
+                    sensorSnapshots.push({
+                        sensorId: -1,
+                        name: `Debug #${slaveAddr}`,
+                        slaveAddr,
+                        pulseCount,
+                        moisture: null,
+                        crc8Valid,
+                    });
+                }
+                continue;
+            }
 
             // 已校准传感器进行脉冲→含水量转换: y = a * ln(1000/x) + b
             let moisture: number | null = null;
@@ -225,14 +240,16 @@ export class DataService {
         });
 
         await RawSensorReading.bulkCreate(
-            sensorSnapshots.map((s) => ({
-                readingId: reading.id,
-                sensorId: s.sensorId,
-                slaveAddr: s.slaveAddr,
-                pulseCount: s.pulseCount,
-                moisture: s.moisture,
-                crc8Valid: s.crc8Valid ? (1 as const) : (0 as const),
-            })),
+            sensorSnapshots
+                .filter((s) => s.sensorId !== -1)
+                .map((s) => ({
+                    readingId: reading.id,
+                    sensorId: s.sensorId,
+                    slaveAddr: s.slaveAddr,
+                    pulseCount: s.pulseCount,
+                    moisture: s.moisture,
+                    crc8Valid: s.crc8Valid ? (1 as const) : (0 as const),
+                })),
         );
 
         // ── 入队延迟推送 ──

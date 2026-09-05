@@ -47,6 +47,11 @@ export function registerSocketEvents() {
         useSystemStore().handleCalibrationStopped();
     });
 
+    // ---- debug mode 事件 ----
+    socket.on('system:debug-mode', (data: { enabled: boolean }) => {
+        useSystemStore().handleDebugModeChanged(data);
+    });
+
     // ---- sensor 事件 ----
     socket.on('sensor:changed', (data) => {
         useSensorStore().handleSensorChanged(data);
@@ -72,6 +77,7 @@ export function unregisterSocketEvents() {
     socket.off('valve:changed');
     socket.off('calibration:started');
     socket.off('calibration:stopped');
+    socket.off('system:debug-mode');
     socket.off('sensor:changed');
     socket.off('task:changed');
     socket.off('data:new');

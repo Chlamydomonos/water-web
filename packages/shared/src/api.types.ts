@@ -145,6 +145,15 @@ export interface SystemStatus {
     calibratedSensorCount: number;
     calibrationInProgress: boolean;
     lastCollectionTime: string | null;
+    debugMode: boolean;
+}
+
+// ============================================================
+// 调试模式
+// ============================================================
+
+export interface DebugModeToggleRequest {
+    enabled: boolean;
 }
 
 // ============================================================

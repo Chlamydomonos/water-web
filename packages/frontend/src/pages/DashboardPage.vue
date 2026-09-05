@@ -22,7 +22,7 @@ import {
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
-import { ElIcon } from 'element-plus';
+import { ElIcon, ElSwitch, ElMessage } from 'element-plus';
 
 use([LineChart, TitleComponent, TooltipComponent, GridComponent, DataZoomComponent, GraphicComponent, CanvasRenderer]);
 
@@ -127,6 +127,25 @@ const chartRef = ref<InstanceType<typeof VChart> | null>(null);
 // ---- 传感器健康芯片 ----
 const sensorHealthList = computed(() => {
     const snapshot = dataStore.latestSnapshot;
+
+    // 调试模式: 显示全部 16 个地址 (含未注册的)
+    if (systemStore.debugMode) {
+        return Array.from({ length: 16 }, (_, addr) => {
+            const sensor = sensorStore.sensorByAddr.get(addr);
+            const sensorSnap = snapshot?.sensors.find((ss) => ss.slaveAddr === addr);
+            return {
+                id: sensor?.id ?? -1,
+                name: sensor?.name ?? `Debug #${addr}`,
+                slaveAddr: addr,
+                faulty: sensor?.faulty ?? false,
+                calibrated: sensor?.calibrated ?? false,
+                moisture: sensorSnap?.moisture ?? null,
+                pulseCount: sensorSnap?.pulseCount ?? 0,
+                crcValid: sensorSnap?.crc8Valid ?? false,
+            };
+        });
+    }
+
     return sensorStore.sensors.map((s) => {
         const sensorSnap = snapshot?.sensors.find((ss) => ss.sensorId === s.id);
         return {
@@ -139,15 +158,23 @@ const sensorHealthList = computed(() => {
 });
 
 function healthColor(sensor: (typeof sensorHealthList.value)[number]) {
+    if (systemStore.debugMode) return 'blue';
     if (sensor.faulty) return 'red';
     if (!sensor.calibrated) return 'yellow';
     return 'green';
 }
 
 function healthLabel(sensor: (typeof sensorHealthList.value)[number]) {
+    if (systemStore.debugMode) return `脉冲: ${sensor.pulseCount}`;
     if (sensor.faulty) return '故障';
     if (!sensor.calibrated) return '未校准';
     return sensor.moisture !== null ? `${sensor.moisture}%` : 'N/A';
+}
+
+// ---- 调试模式切换 ----
+async function onDebugModeToggle(enabled: string | number | boolean) {
+    await systemStore.toggleDebugMode(Boolean(enabled));
+    ElMessage.success(enabled ? '调试模式已开启' : '调试模式已关闭');
 }
 
 function goToSensors() {
@@ -182,9 +209,15 @@ function goToManualIrrigation() {
 
         <!-- 传感器健康网格 -->
         <section class="dashboard-page__sensor-health">
-            <h3 class="dashboard-page__section-title">传感器健康</h3>
+            <div class="dashboard-page__sensor-health-header">
+                <h3 class="dashboard-page__section-title">传感器健康</h3>
+                <div class="dashboard-page__debug-toggle">
+                    <span class="dashboard-page__debug-toggle-label">调试模式</span>
+                    <ElSwitch :model-value="systemStore.debugMode" @change="onDebugModeToggle" size="small" />
+                </div>
+            </div>
             <EmptyState
-                v-if="sensorStore.sensors.length === 0"
+                v-if="!systemStore.debugMode && sensorStore.sensors.length === 0"
                 message="暂无传感器，请先添加"
                 action-label="添加第一个传感器"
                 @action="goToSensors"
@@ -202,7 +235,14 @@ function goToManualIrrigation() {
                         <span class="sensor-health-chip__name">{{ sensor.name }}</span>
                         <span class="sensor-health-chip__label">{{ healthLabel(sensor) }}</span>
                     </div>
-                    <MoistureBadge v-if="sensor.moisture !== null" :value="sensor.moisture" />
+                    <MoistureBadge v-if="!systemStore.debugMode && sensor.moisture !== null" :value="sensor.moisture" />
+                    <span
+                        v-if="systemStore.debugMode"
+                        class="sensor-health-chip__crc"
+                        :class="{ 'sensor-health-chip__crc--bad': !sensor.crcValid }"
+                    >
+                        {{ sensor.crcValid ? 'CRC✓' : 'CRC✗' }}
+                    </span>
                 </div>
             </div>
         </section>
@@ -267,6 +307,24 @@ function goToManualIrrigation() {
 }
 
 // ---- 传感器健康网格 ----
+.dashboard-page__sensor-health-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.dashboard-page__debug-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.dashboard-page__debug-toggle-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
 .dashboard-page__sensor-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -309,6 +367,10 @@ function goToManualIrrigation() {
     &--green {
         border-left: 3px solid var(--color-success);
     }
+
+    &--blue {
+        border-left: 3px solid var(--color-primary);
+    }
 }
 
 .sensor-health-chip__dot {
@@ -325,6 +387,9 @@ function goToManualIrrigation() {
     }
     .sensor-health-chip--red & {
         background: var(--dot-red);
+    }
+    .sensor-health-chip--blue & {
+        background: var(--color-primary);
     }
 }
 
@@ -348,6 +413,16 @@ function goToManualIrrigation() {
 .sensor-health-chip__label {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
+}
+
+.sensor-health-chip__crc {
+    font-size: var(--font-size-xs);
+    color: var(--color-success);
+    flex-shrink: 0;
+
+    &--bad {
+        color: var(--color-danger);
+    }
 }
 
 // ---- 移动端快捷操作栏 ----

@@ -12,6 +12,7 @@ export const useSystemStore = defineStore('system', () => {
     const calibrationInProgress = ref(false);
     const calibratingSensorId = ref<number | null>(null);
     const lastCollectionTime = ref<string | null>(null);
+    const debugMode = ref(false);
 
     // ---- 横幅延迟显示 (避免连接建立过程中短暂闪烁) ----
     const SOCKET_BANNER_DELAY = 3_000; // WebSocket 断开 3s 后才显示横幅
@@ -48,6 +49,7 @@ export const useSystemStore = defineStore('system', () => {
             activeTaskCount: number;
             calibrationInProgress: boolean;
             lastCollectionTime: string | null;
+            debugMode: boolean;
         }>('/api/system/status');
         if (res.success) {
             espConnected.value = res.data.espConnected;
@@ -55,6 +57,7 @@ export const useSystemStore = defineStore('system', () => {
             activeTaskCount.value = res.data.activeTaskCount;
             calibrationInProgress.value = res.data.calibrationInProgress;
             lastCollectionTime.value = res.data.lastCollectionTime;
+            debugMode.value = res.data.debugMode;
         }
     }
 
@@ -102,6 +105,17 @@ export const useSystemStore = defineStore('system', () => {
         }, SOCKET_BANNER_DELAY);
     }
 
+    function handleDebugModeChanged(data: { enabled: boolean }) {
+        debugMode.value = data.enabled;
+    }
+
+    async function toggleDebugMode(enabled: boolean) {
+        const res = await api.post<{ debugMode: boolean }>('/api/system/debug-mode', { enabled });
+        if (res.success) {
+            debugMode.value = res.data.debugMode;
+        }
+    }
+
     return {
         socketConnected,
         espConnected,
@@ -111,6 +125,7 @@ export const useSystemStore = defineStore('system', () => {
         calibrationInProgress,
         calibratingSensorId,
         lastCollectionTime,
+        debugMode,
         showSocketDisconnected,
         showEspDisconnected,
         isValveOpen,
@@ -123,5 +138,7 @@ export const useSystemStore = defineStore('system', () => {
         handleCalibrationStopped,
         handleSocketConnected,
         handleSocketDisconnected,
+        handleDebugModeChanged,
+        toggleDebugMode,
     };
 });

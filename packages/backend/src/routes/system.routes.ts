@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import type { TcpClient } from '../tcp/tcp-client.js';
 import type { DataService } from '../services/data.service.js';
 import type { IrrigationTaskService } from '../services/irrigation-task.service.js';
-import { isCalibrating } from '../services/sensor.service.js';
+import { isCalibrating, isDebugMode } from '../services/sensor.service.js';
 import { Sensor } from '../db/models/Sensor.js';
 import { IrrigationTask } from '../db/models/IrrigationTask.js';
 import { ok, fail, internalError } from '../lib/response.js';
@@ -18,10 +18,11 @@ export interface SystemRoutesDeps {
     tcpClient: TcpClient;
     dataService: DataService;
     taskService: IrrigationTaskService;
+    sensorService: import('../services/sensor.service.js').SensorService;
 }
 
 export function registerSystemRoutes(app: FastifyInstance, deps: SystemRoutesDeps): void {
-    const { tcpClient, dataService, taskService } = deps;
+    const { tcpClient, dataService, taskService, sensorService } = deps;
 
     // ── 系统综合状态 ──
     app.post('/api/system/status', async (_req, reply) => {
@@ -48,6 +49,7 @@ export function registerSystemRoutes(app: FastifyInstance, deps: SystemRoutesDep
                 calibratedSensorCount: calibratedCount,
                 calibrationInProgress: isCalibrating(),
                 lastCollectionTime: dataService.getLastCollectionTime(),
+                debugMode: isDebugMode(),
             };
 
             return reply.send(ok(status));
@@ -66,6 +68,17 @@ export function registerSystemRoutes(app: FastifyInstance, deps: SystemRoutesDep
                 return reply.send(fail('ESP_NOT_CONNECTED', 'ESP32 未连接'));
             }
             return reply.send(ok({ state }));
+        } catch (err) {
+            return reply.status(500).send(internalError(String(err)));
+        }
+    });
+
+    // ── 调试模式切换 ──
+    app.post('/api/system/debug-mode', async (req, reply) => {
+        try {
+            const { enabled } = req.body as { enabled: boolean };
+            const result = await sensorService.setDebugMode(enabled);
+            return reply.send(ok({ debugMode: result }));
         } catch (err) {
             return reply.status(500).send(internalError(String(err)));
         }

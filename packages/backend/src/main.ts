@@ -59,7 +59,7 @@ async function main() {
     // 注册路由
     registerSensorRoutes(app, sensorService);
     registerTaskRoutes(app, irrigationTaskService);
-    registerSystemRoutes(app, { tcpClient, dataService, taskService: irrigationTaskService });
+    registerSystemRoutes(app, { tcpClient, dataService, taskService: irrigationTaskService, sensorService });
     registerDataRoutes(app, dataService);
 
     // Socket.IO 事件绑定

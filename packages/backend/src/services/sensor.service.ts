@@ -27,6 +27,17 @@ export function getCalibratingSensorId(): number | null {
 }
 
 // ============================================================
+// 调试模式状态（内存中，全局开关）
+// ============================================================
+
+let debugModeEnabled = false;
+
+/** 导出调试模式状态 (供 DataService 等外部使用) */
+export function isDebugMode(): boolean {
+    return debugModeEnabled;
+}
+
+// ============================================================
 // 模型 → DTO
 // ============================================================
 
@@ -122,6 +133,14 @@ export class SensorService {
     // ── 屏蔽位图同步 ──
 
     async syncMaskToEsp32(): Promise<void> {
+        // 调试模式下取消所有 16 个从机的屏蔽
+        if (debugModeEnabled) {
+            for (let addr = 0; addr <= 15; addr++) {
+                await this.tcpClient.maskSlave(addr, false);
+            }
+            return;
+        }
+
         const sensors = await Sensor.findAll();
         const activeAddresses = new Set(sensors.filter((s) => s.faulty === 0).map((s) => s.slaveAddr));
 
@@ -129,6 +148,21 @@ export class SensorService {
             const shouldMask = !activeAddresses.has(addr);
             await this.tcpClient.maskSlave(addr, shouldMask);
         }
+    }
+
+    // ── 调试模式 ──
+
+    async setDebugMode(enabled: boolean): Promise<boolean> {
+        debugModeEnabled = enabled;
+        // 先广播状态变更，确保前端即时收到
+        this.io?.emit('system:debug-mode', { enabled });
+        // 同步屏蔽位图 (ESP32 离线时仅记录错误，不影响调试模式状态)
+        try {
+            await this.syncMaskToEsp32();
+        } catch (err) {
+            console.error('[sensor] syncMaskToEsp32 failed in setDebugMode:', err);
+        }
+        return debugModeEnabled;
     }
 
     // ── 校准 ──
