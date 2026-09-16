@@ -28,14 +28,14 @@ export const useDataStore = defineStore('data', () => {
     );
     /**
      * 按传感器分组的含水量序列 (供仪表盘多曲线图表使用)
-     * key 为 sensorId，value 为 [timestamp, moisture] 序列
+     * key 为 sensorId，value 为 [timestamp(ms), moisture] 序列
      */
     const chartMoistureSeriesBySensor = computed(() => {
-        const map = new Map<number, [string, number | null][]>();
+        const map = new Map<number, [number, number | null][]>();
         for (const snap of dataBuffer.value) {
             for (const s of snap.sensors) {
                 if (!map.has(s.sensorId)) map.set(s.sensorId, []);
-                map.get(s.sensorId)!.push([String(snap.timestamp), clampMoisture(s.moisture)]);
+                map.get(s.sensorId)!.push([snap.timestamp, clampMoisture(s.moisture)]);
             }
         }
         return map;

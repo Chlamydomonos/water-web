@@ -120,18 +120,18 @@ const chartOption = computed(() => {
         };
     }
 
-    const timestamps = points.map((p) => new Date(p.timestamp).toLocaleString('zh-CN'));
     // 其他页面图表显示时将含水量截断到 [0, 100] 范围内（校准页面不截断）
     const clampMoisture = (v: number | null): number | null => (v === null ? null : Math.max(0, Math.min(100, v)));
-    const moistureData: [string, number | null][] = points.map((p) => [
-        new Date(p.timestamp).toLocaleString('zh-CN'),
+    // time 轴要求数字时间戳 (ms)
+    const moistureData: [number, number | null][] = points.map((p) => [
+        new Date(p.timestamp).getTime(),
         clampMoisture(p.avgMoisture),
     ]);
 
     const series: Array<{
         type: 'line';
         name: string;
-        data: [string, number | null][];
+        data: [number, number | null][];
         connectNulls: boolean;
         smooth: boolean;
         symbol: 'none';
@@ -153,8 +153,8 @@ const chartOption = computed(() => {
 
     // 如果是原始数据则叠加阀门状态
     if (resolution.value === 'raw') {
-        const valveData: [string, number | null][] = points.map((p) => [
-            new Date(p.timestamp).toLocaleString('zh-CN'),
+        const valveData: [number, number | null][] = points.map((p) => [
+            new Date(p.timestamp).getTime(),
             p.valveState != null ? p.valveState * 100 : null,
         ]);
         series.push({
@@ -171,13 +171,30 @@ const chartOption = computed(() => {
     }
 
     return {
-        tooltip: { trigger: 'axis' as const },
+        tooltip: {
+            trigger: 'axis' as const,
+            formatter: (params: unknown) => {
+                const list = params as { seriesName: string; data: [number, number | null] }[];
+                if (!list || list.length === 0) return '';
+                const ts = new Date(list[0]!.data[0]).toLocaleString('zh-CN');
+                const lines = list
+                    .map((p) => {
+                        const val = p.data[1] !== null ? `${p.data[1]}%` : 'N/A';
+                        return `${p.seriesName}: ${val}`;
+                    })
+                    .join('<br/>');
+                return `${ts}<br/>${lines}`;
+            },
+        },
         grid: { top: 8, right: 60, bottom: 60, left: 48 },
         xAxis: {
-            type: 'category' as const,
-            data: timestamps,
+            type: 'time' as const,
             boundaryGap: false,
-            axisLabel: { color: axisColor, fontSize: 11 },
+            axisLabel: {
+                color: axisColor,
+                fontSize: 11,
+                formatter: (val: number) => new Date(val).toLocaleString('zh-CN'),
+            },
             axisLine: { lineStyle: { color: gridColor } },
         },
         yAxis: {

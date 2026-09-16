@@ -92,7 +92,7 @@ const chartOption = computed<EChartsOption>(() => {
         tooltip: {
             trigger: 'axis',
             formatter: (params: unknown) => {
-                const list = params as { seriesName: string; data: [string, number | null] }[];
+                const list = params as { seriesName: string; data: [number, number | null] }[];
                 if (!list || list.length === 0) return '';
                 const ts = new Date(list[0]!.data[0]).toLocaleTimeString('zh-CN');
                 const lines = list
