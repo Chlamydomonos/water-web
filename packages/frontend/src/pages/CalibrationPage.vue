@@ -16,6 +16,7 @@ import {
 import { WarningFilled } from '@element-plus/icons-vue';
 import { api } from '@/lib/api';
 import { useDataStore } from '@/stores/data';
+import ConfirmDeleteDialog from '@/components/ConfirmDeleteDialog.vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { ScatterChart, LineChart } from 'echarts/charts';
@@ -79,6 +80,33 @@ async function submitDataPoint() {
 }
 
 // ---- 步骤 2: 查看数据 ----
+const deleteTarget = ref<CalibrationPointDto | null>(null);
+const deleting = ref(false);
+
+function confirmDeletePoint(point: CalibrationPointDto) {
+    deleteTarget.value = point;
+}
+
+async function doDeletePoint() {
+    if (!deleteTarget.value) return;
+    deleting.value = true;
+    try {
+        const res = await api.post<CalibrationPointDto>('/api/sensors/calibration/delete-point', {
+            sensorId,
+            pointId: deleteTarget.value.id,
+        });
+        if (res.success) {
+            points.value = points.value.filter((p) => p.id !== deleteTarget.value!.id);
+            ElMessage.success('数据点已删除');
+        } else {
+            ElMessage.error(res.error?.message ?? '删除失败');
+        }
+    } finally {
+        deleteTarget.value = null;
+        deleting.value = false;
+    }
+}
+
 const scatterOption = computed(() => {
     const data = points.value.map((p) => [p.pulseCount, p.actualMoisture] as [number, number]);
     return {
@@ -310,6 +338,17 @@ onBeforeUnmount(async () => {
                             {{ new Date((row as CalibrationPointDto).createdAt).toLocaleTimeString('zh-CN') }}
                         </template>
                     </ElTableColumn>
+                    <ElTableColumn label="操作" width="80">
+                        <template #default="{ row }">
+                            <button
+                                class="calibration-step__delete-btn"
+                                :disabled="deleting"
+                                @click="confirmDeletePoint(row as CalibrationPointDto)"
+                            >
+                                删除
+                            </button>
+                        </template>
+                    </ElTableColumn>
                 </ElTable>
 
                 <p class="calibration-step__count">数据点: {{ points.length }} (至少需要 2 个)</p>
@@ -376,6 +415,15 @@ onBeforeUnmount(async () => {
                 </div>
             </div>
         </div>
+
+        <!-- 删除数据点确认 -->
+        <ConfirmDeleteDialog
+            :visible="deleteTarget !== null"
+            title="删除数据点"
+            :message="`确定要删除数据点「脉冲 ${deleteTarget?.pulseCount ?? 0} → 含水量 ${deleteTarget?.actualMoisture ?? 0}%」吗？`"
+            @confirm="doDeletePoint"
+            @cancel="deleteTarget = null"
+        />
     </div>
 </template>
 
@@ -537,6 +585,29 @@ onBeforeUnmount(async () => {
 .calibration-step__count {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+}
+
+.calibration-step__delete-btn {
+    padding: 4px var(--space-sm);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-text);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+
+    &:hover:not(:disabled) {
+        border-color: var(--color-danger);
+        color: var(--color-danger);
+    }
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
 }
 
 .calibration-step__chart {

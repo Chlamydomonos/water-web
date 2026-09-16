@@ -104,6 +104,11 @@ export interface CalibrationSubmitDataRequest {
     actualMoisture: number;
 }
 
+export interface CalibrationDeletePointRequest {
+    sensorId: number;
+    pointId: number;
+}
+
 export interface CalibrationCalculateRequest {
     sensorId: number;
 }

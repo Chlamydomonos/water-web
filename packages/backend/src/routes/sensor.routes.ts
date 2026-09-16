@@ -10,6 +10,7 @@ import type {
     CalibrationStartRequest,
     CalibrationStopRequest,
     CalibrationSubmitDataRequest,
+    CalibrationDeletePointRequest,
     CalibrationCalculateRequest,
     CalibrationStatusRequest,
 } from 'shared';
@@ -121,6 +122,19 @@ export function registerSensorRoutes(app: FastifyInstance, sensorService: Sensor
         try {
             const { sensorId, actualMoisture } = req.body as CalibrationSubmitDataRequest;
             const point = await sensorService.calibrationSubmitData(sensorId, actualMoisture);
+            return reply.send(ok(point));
+        } catch (err) {
+            if (err instanceof CalibrationError) {
+                return reply.send(fail(err.code, err.message));
+            }
+            return reply.status(500).send(internalError(String(err)));
+        }
+    });
+
+    app.post('/api/sensors/calibration/delete-point', async (req, reply) => {
+        try {
+            const { sensorId, pointId } = req.body as CalibrationDeletePointRequest;
+            const point = await sensorService.calibrationDeletePoint(sensorId, pointId);
             return reply.send(ok(point));
         } catch (err) {
             if (err instanceof CalibrationError) {

@@ -223,6 +223,17 @@ export class SensorService {
         return toCalibPointDto(point);
     }
 
+    async calibrationDeletePoint(sensorId: number, pointId: number): Promise<CalibrationPointDto | null> {
+        const point = await CalibrationPoint.findByPk(pointId);
+        if (!point || point.sensorId !== sensorId) {
+            throw new CalibrationError('CALIB_POINT_NOT_FOUND', '校准数据点不存在');
+        }
+
+        const dto = toCalibPointDto(point);
+        await point.destroy();
+        return dto;
+    }
+
     async calibrationCalculate(sensorId: number): Promise<CalibrationCalculateResponse> {
         if (calibratingSensorId !== sensorId) {
             throw new CalibrationError('NOT_CALIBRATING', '该传感器未处于校准模式');
