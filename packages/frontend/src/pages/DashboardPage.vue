@@ -19,12 +19,22 @@ import {
     GridComponent,
     DataZoomComponent,
     GraphicComponent,
+    LegendComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import { ElIcon, ElSwitch, ElMessage } from 'element-plus';
 
-use([LineChart, TitleComponent, TooltipComponent, GridComponent, DataZoomComponent, GraphicComponent, CanvasRenderer]);
+use([
+    LineChart,
+    TitleComponent,
+    TooltipComponent,
+    GridComponent,
+    DataZoomComponent,
+    GraphicComponent,
+    LegendComponent,
+    CanvasRenderer,
+]);
 
 const router = useRouter();
 const systemStore = useSystemStore();
@@ -39,6 +49,9 @@ function cssVar(name: string): string {
 }
 
 // ---- 实时图表配置 ----
+/** 曲线调色板 (平均湿度用主题色，各传感器曲线依次取色) */
+const SERIES_PALETTE = ['#1677ff', '#52c41a', '#faad14', '#ff4d4f', '#9254de', '#13c2c2', '#eb2f96', '#fa8c16'];
+
 const chartOption = computed<EChartsOption>(() => {
     // 依赖 themeStore.mode 以在主题切换时重新计算
     void themeStore.mode;
@@ -51,19 +64,47 @@ const chartOption = computed<EChartsOption>(() => {
     const moistureData = dataStore.chartMoistureSeries;
     const hasData = moistureData.length > 0;
 
+    // ── 各已校准传感器的曲线 ──
+    const seriesBySensor = dataStore.chartMoistureSeriesBySensor;
+    const calibratedSensors = sensorStore.calibratedSensors;
+    const sensorSeries = calibratedSensors.map((s, i) => ({
+        type: 'line' as const,
+        name: s.name,
+        data: seriesBySensor.get(s.id) ?? [],
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 1.5, color: SERIES_PALETTE[(i + 1) % SERIES_PALETTE.length] },
+        itemStyle: { color: SERIES_PALETTE[(i + 1) % SERIES_PALETTE.length] },
+        connectNulls: false,
+    }));
+
     const baseOption: EChartsOption = {
         animation: false,
+        legend: {
+            show: sensorSeries.length > 0,
+            type: 'scroll',
+            top: 0,
+            left: 'center',
+            textStyle: { fontSize: 11, color: axisColor },
+            itemWidth: 14,
+            itemHeight: 8,
+        },
         tooltip: {
             trigger: 'axis',
             formatter: (params: unknown) => {
-                const p = (params as { data: [string, number | null] }[])[0];
-                if (!p) return '';
-                const ts = new Date(p.data[0]).toLocaleTimeString('zh-CN');
-                const val = p.data[1] !== null ? `${p.data[1]}%` : 'N/A';
-                return `${ts}<br/>含水量: ${val}`;
+                const list = params as { seriesName: string; data: [string, number | null] }[];
+                if (!list || list.length === 0) return '';
+                const ts = new Date(list[0]!.data[0]).toLocaleTimeString('zh-CN');
+                const lines = list
+                    .map((p) => {
+                        const val = p.data[1] !== null ? `${p.data[1]}%` : 'N/A';
+                        return `${p.seriesName}: ${val}`;
+                    })
+                    .join('<br/>');
+                return `${ts}<br/>${lines}`;
             },
         },
-        grid: { top: 16, right: 16, bottom: 36, left: 40 },
+        grid: { top: 32, right: 16, bottom: 36, left: 40 },
         xAxis: {
             type: 'time',
             axisLabel: {
@@ -93,8 +134,10 @@ const chartOption = computed<EChartsOption>(() => {
             },
         ],
         series: [
+            // 平均湿度曲线 (主题色 + 面积填充)
             {
                 type: 'line',
+                name: '平均',
                 data: moistureData,
                 smooth: true,
                 symbol: 'none',
@@ -102,6 +145,7 @@ const chartOption = computed<EChartsOption>(() => {
                 areaStyle: { color: fillColor },
                 connectNulls: false,
             },
+            ...sensorSeries,
         ],
     };
 

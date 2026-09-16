@@ -26,7 +26,20 @@ export const useDataStore = defineStore('data', () => {
     const chartValveSeries = computed(() =>
         dataBuffer.value.map((d) => [d.timestamp, d.valveState] as [number, 0 | 1]),
     );
-
+    /**
+     * 按传感器分组的含水量序列 (供仪表盘多曲线图表使用)
+     * key 为 sensorId，value 为 [timestamp, moisture] 序列
+     */
+    const chartMoistureSeriesBySensor = computed(() => {
+        const map = new Map<number, [string, number | null][]>();
+        for (const snap of dataBuffer.value) {
+            for (const s of snap.sensors) {
+                if (!map.has(s.sensorId)) map.set(s.sensorId, []);
+                map.get(s.sensorId)!.push([String(snap.timestamp), clampMoisture(s.moisture)]);
+            }
+        }
+        return map;
+    });
     // ---- 操作 ----
     function pushSnapshot(snapshot: DataSnapshot) {
         dataBuffer.value.push(snapshot);
@@ -63,6 +76,7 @@ export const useDataStore = defineStore('data', () => {
         latestSnapshot,
         latestMoisture,
         chartMoistureSeries,
+        chartMoistureSeriesBySensor,
         chartValveSeries,
         pushSnapshot,
         fillBuffer,
