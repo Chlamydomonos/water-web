@@ -5,10 +5,8 @@ import {
     InferCreationAttributes,
     Model,
     NonAttribute,
-    Op,
 } from '@sequelize/core';
 import {
-    AfterSync,
     Attribute,
     AutoIncrement,
     BelongsTo,
@@ -113,28 +111,4 @@ export class IrrigationTask extends Model<InferAttributes<IrrigationTask>, Infer
         foreignKeyConstraints: true,
     })
     declare suspendedByTask: NonAttribute<IrrigationTask | null>;
-
-    // ── Constraints ──
-
-    @AfterSync
-    static async onSync() {
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['type'],
-            type: 'CHECK',
-            where: {
-                type: {
-                    [Op.in]: ['manual', 'humidity', 'timed'],
-                },
-            },
-        });
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['priority'],
-            type: 'CHECK',
-            where: {
-                priority: {
-                    [Op.in]: [0, 1, 2],
-                },
-            },
-        });
-    }
 }

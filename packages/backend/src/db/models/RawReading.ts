@@ -5,10 +5,8 @@ import {
     InferCreationAttributes,
     Model,
     NonAttribute,
-    Op,
 } from '@sequelize/core';
 import {
-    AfterSync,
     Attribute,
     AutoIncrement,
     Default,
@@ -53,19 +51,4 @@ export class RawReading extends Model<InferAttributes<RawReading>, InferCreation
         foreignKeyConstraints: true,
     })
     declare rawSensorReadings: NonAttribute<RawSensorReading[]>;
-
-    // ── Constraints ──
-
-    @AfterSync
-    static async onSync() {
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['valveState'],
-            type: 'CHECK',
-            where: {
-                valveState: {
-                    [Op.in]: [0, 1],
-                },
-            },
-        });
-    }
 }

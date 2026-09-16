@@ -5,17 +5,8 @@ import {
     InferCreationAttributes,
     Model,
     NonAttribute,
-    Op,
 } from '@sequelize/core';
-import {
-    AfterSync,
-    Attribute,
-    AutoIncrement,
-    BelongsTo,
-    Index,
-    NotNull,
-    PrimaryKey,
-} from '@sequelize/core/decorators-legacy';
+import { Attribute, AutoIncrement, BelongsTo, Index, NotNull, PrimaryKey } from '@sequelize/core/decorators-legacy';
 import { RawReading } from './RawReading.js';
 import { Sensor } from './Sensor.js';
 
@@ -76,19 +67,4 @@ export class RawSensorReading extends Model<
         foreignKeyConstraints: true,
     })
     declare sensor: NonAttribute<Sensor>;
-
-    // ── Constraints ──
-
-    @AfterSync
-    static async onSync() {
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['crc8Valid'],
-            type: 'CHECK',
-            where: {
-                crc8Valid: {
-                    [Op.in]: [0, 1],
-                },
-            },
-        });
-    }
 }

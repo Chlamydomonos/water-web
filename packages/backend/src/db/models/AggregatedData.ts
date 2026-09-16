@@ -1,5 +1,5 @@
-import { CreationOptional, DataTypes, InferAttributes, InferCreationAttributes, Model, Op } from '@sequelize/core';
-import { AfterSync, Attribute, AutoIncrement, Index, NotNull, PrimaryKey } from '@sequelize/core/decorators-legacy';
+import { CreationOptional, DataTypes, InferAttributes, InferCreationAttributes, Model } from '@sequelize/core';
+import { Attribute, AutoIncrement, Index, NotNull, PrimaryKey } from '@sequelize/core/decorators-legacy';
 
 export class AggregatedData extends Model<InferAttributes<AggregatedData>, InferCreationAttributes<AggregatedData>> {
     @Attribute(DataTypes.INTEGER)
@@ -20,17 +20,4 @@ export class AggregatedData extends Model<InferAttributes<AggregatedData>, Infer
     @Attribute(DataTypes.DOUBLE)
     @NotNull
     declare avgMoisture: number;
-
-    @AfterSync
-    static async onSync() {
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['resolution'],
-            type: 'CHECK',
-            where: {
-                resolution: {
-                    [Op.in]: ['second', 'hour'],
-                },
-            },
-        });
-    }
 }

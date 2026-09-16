@@ -5,10 +5,8 @@ import {
     InferCreationAttributes,
     Model,
     NonAttribute,
-    Op,
 } from '@sequelize/core';
 import {
-    AfterSync,
     Attribute,
     AutoIncrement,
     Default,
@@ -78,19 +76,4 @@ export class Sensor extends Model<InferAttributes<Sensor>, InferCreationAttribut
         foreignKeyConstraints: true,
     })
     declare rawSensorReadings: NonAttribute<RawSensorReading[]>;
-
-    // ── Constraints ──
-
-    @AfterSync
-    static async onSync() {
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['slaveAddr'],
-            type: 'CHECK',
-            where: {
-                slaveAddr: {
-                    [Op.between]: [0, 15],
-                },
-            },
-        });
-    }
 }

@@ -5,9 +5,8 @@ import {
     InferCreationAttributes,
     Model,
     NonAttribute,
-    Op,
 } from '@sequelize/core';
-import { AfterSync, Attribute, BelongsTo, NotNull, PrimaryKey } from '@sequelize/core/decorators-legacy';
+import { Attribute, BelongsTo, NotNull, PrimaryKey } from '@sequelize/core/decorators-legacy';
 import { IrrigationTask } from './IrrigationTask.js';
 
 export class ManualTaskConfig extends Model<
@@ -34,19 +33,4 @@ export class ManualTaskConfig extends Model<
         foreignKeyConstraints: true,
     })
     declare task: NonAttribute<IrrigationTask>;
-
-    // ── Constraints ──
-
-    @AfterSync
-    static async onSync() {
-        await this.sequelize.queryInterface.addConstraint(this.table, {
-            fields: ['durationSeconds'],
-            type: 'CHECK',
-            where: {
-                durationSeconds: {
-                    [Op.gt]: 0,
-                },
-            },
-        });
-    }
 }
