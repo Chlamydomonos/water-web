@@ -234,6 +234,46 @@ export class SensorService {
         return dto;
     }
 
+    /**
+     * 根据当前拟合公式反推基准数据点并保存。
+     *
+     * 拟合公式: y = a * ln(1000/x) + b，反解得 x = 1000 * e^((b - y) / a)。
+     * 假定历史校准仅提交过两个基准点 (空气 -50%、水中 100%)，
+     * 将两个含水量代入公式反算脉冲计数，重建数据点。
+     */
+    async calibrationInferPoints(sensorId: number): Promise<CalibrationPointDto[]> {
+        if (calibratingSensorId !== sensorId) {
+            throw new CalibrationError('NOT_CALIBRATING', '该传感器未处于校准模式');
+        }
+        const sensor = await Sensor.findByPk(sensorId);
+        if (!sensor) {
+            throw new CalibrationError('SENSOR_NOT_FOUND', '传感器不存在');
+        }
+        if (sensor.calibrated !== 1 || sensor.calibA == null || sensor.calibB == null || sensor.calibA === 0) {
+            throw new CalibrationError('NOT_CALIBRATED', '该传感器尚未校准，无法推断数据点');
+        }
+
+        const { a, b } = { a: sensor.calibA, b: sensor.calibB };
+        const moistureLevels = [-50, 100];
+
+        const created: CalibrationPoint[] = [];
+        for (const moisture of moistureLevels) {
+            // y = a * ln(1000/x) + b  =>  x = 1000 * e^((b - y) / a)
+            const pulseCount = Math.round(1000 * Math.exp((b - moisture) / a));
+            if (!Number.isFinite(pulseCount) || pulseCount <= 0) {
+                throw new CalibrationError('INFER_FAILED', `含水量 ${moisture}% 反算脉冲计数失败`);
+            }
+            const point = await CalibrationPoint.create({
+                sensorId,
+                pulseCount,
+                actualMoisture: moisture,
+            });
+            created.push(point);
+        }
+
+        return created.map(toCalibPointDto);
+    }
+
     async calibrationCalculate(sensorId: number): Promise<CalibrationCalculateResponse> {
         if (calibratingSensorId !== sensorId) {
             throw new CalibrationError('NOT_CALIBRATING', '该传感器未处于校准模式');

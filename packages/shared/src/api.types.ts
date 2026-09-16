@@ -117,6 +117,14 @@ export interface CalibrationStatusRequest {
     sensorId: number;
 }
 
+export interface CalibrationInferPointsRequest {
+    sensorId: number;
+}
+
+export interface CalibrationInferPointsResponse {
+    points: CalibrationPointDto[];
+}
+
 // ============================================================
 // 数据采集 — DataSnapshot (Socket.IO 推送)
 // ============================================================

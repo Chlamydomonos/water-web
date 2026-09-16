@@ -109,6 +109,26 @@ async function doDeletePoint() {
     }
 }
 
+// ---- 数据点推断 (根据拟合公式反推基准点) ----
+const inferring = ref(false);
+
+async function inferPoints() {
+    inferring.value = true;
+    try {
+        const res = await api.post<{ points: CalibrationPointDto[] }>('/api/sensors/calibration/infer-points', {
+            sensorId,
+        });
+        if (res.success) {
+            points.value.push(...res.data.points);
+            ElMessage.success(`已推断并保存 ${res.data.points.length} 个基准数据点`);
+        } else {
+            ElMessage.error(res.error?.message ?? '推断失败');
+        }
+    } finally {
+        inferring.value = false;
+    }
+}
+
 const scatterOption = computed(() => {
     const data = points.value.map((p) => [p.pulseCount, p.actualMoisture] as [number, number]);
     return {
@@ -326,6 +346,16 @@ onBeforeUnmount(async () => {
                     最新: 脉冲 {{ points[points.length - 1]!.pulseCount }} → 含水量
                     {{ points[points.length - 1]!.actualMoisture }}%
                 </p>
+
+                <!-- 根据拟合公式反推基准数据点 (用于恢复丢失的历史校准数据) -->
+                <button
+                    v-if="wasCalibrated"
+                    class="calibration-step__secondary-btn"
+                    :disabled="inferring"
+                    @click="inferPoints"
+                >
+                    {{ inferring ? '推断中...' : '根据拟合公式推断基准数据点 (-50% / 100%)' }}
+                </button>
 
                 <button class="calibration-step__secondary-btn" :disabled="points.length < 2" @click="nextStep">
                     下一步: 查看数据
