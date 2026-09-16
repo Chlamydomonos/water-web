@@ -13,7 +13,8 @@ export const useDataStore = defineStore('data', () => {
     /** 已释放 (可显示) 的数据缓冲区 */
     const dataBuffer = ref<DataSnapshot[]>([]);
     const history = ref<DataPoint[]>([]);
-    const bufferMaxSize = 300; // 5分钟 × 60秒
+    // 图表最多显示 5 分钟数据: ESP32 每 30s 采集一次 → 5 分钟 ≈ 10 个快照
+    const bufferMaxSize = 10;
 
     /** 显示延迟 (毫秒): 快照滞后真实时间 60 秒显示 */
     const DISPLAY_DELAY_MS = 60_000;
@@ -96,6 +97,12 @@ export const useDataStore = defineStore('data', () => {
 
         pendingBuffer.value = remaining;
         dataBuffer.value = sortAndDedupe([...dataBuffer.value, ...ready]);
+        // 丢弃超过 5 分钟的旧数据 (按时间戳判断，而非仅按条数)
+        const expireBefore = now - 5 * 60_000;
+        while (dataBuffer.value.length > 0 && dataBuffer.value[0]!.timestamp < expireBefore) {
+            dataBuffer.value.shift();
+        }
+        // 兜底: 条数上限 (防止时间戳异常时缓冲无限增长)
         while (dataBuffer.value.length > bufferMaxSize) {
             dataBuffer.value.shift();
         }
