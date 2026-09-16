@@ -168,7 +168,7 @@ function healthLabel(sensor: (typeof sensorHealthList.value)[number]) {
     if (systemStore.debugMode) return `脉冲: ${sensor.pulseCount}`;
     if (sensor.faulty) return '故障';
     if (!sensor.calibrated) return '未校准';
-    return sensor.moisture !== null ? `${sensor.moisture}%` : 'N/A';
+    return sensor.moisture !== null ? `${sensor.moisture.toFixed(1)}%` : 'N/A';
 }
 
 // ---- 调试模式切换 ----

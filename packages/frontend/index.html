@@ -11,6 +11,23 @@
     </head>
     <body>
         <div id="app"></div>
+        <!-- 在应用挂载前应用持久化的主题，避免首帧闪烁 (FOUC)。
+             key 'theme' 与 pinia-plugin-persistedstate 的默认 key (store id) 一致。 -->
+        <script>
+            (function () {
+                try {
+                    var raw = localStorage.getItem('theme');
+                    if (raw) {
+                        var mode = JSON.parse(raw).mode;
+                        if (mode === 'dark' || mode === 'light') {
+                            document.documentElement.setAttribute('data-theme', mode);
+                        }
+                    }
+                } catch (e) {
+                    /* 忽略解析失败，保持默认亮色主题 */
+                }
+            })();
+        </script>
         <script type="module" src="/src/main.ts"></script>
     </body>
 </html>

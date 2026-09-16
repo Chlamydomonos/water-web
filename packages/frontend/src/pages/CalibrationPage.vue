@@ -44,6 +44,8 @@ const points = ref<CalibrationPointDto[]>([]);
 const formula = ref<{ a: number; b: number } | null>(null);
 const rSquared = ref<number | null>(null);
 const calibrating = ref(false);
+/** 传感器此前已校准 (重新校准场景) */
+const wasCalibrated = ref(false);
 
 // ---- 步骤 1: 输入实际含水量 ----
 const actualMoisture = ref<number>(25);
@@ -239,6 +241,7 @@ onMounted(async () => {
     if (statusRes.success) {
         points.value = statusRes.data.points ?? [];
         calibrating.value = statusRes.data.calibrating;
+        wasCalibrated.value = statusRes.data.calibrated;
         if (statusRes.data.calibrated && statusRes.data.formula) {
             formula.value = statusRes.data.formula;
         }
@@ -270,6 +273,14 @@ onBeforeUnmount(async () => {
         <ElSteps :active="step" align-center class="calibration-page__steps">
             <ElStep v-for="(s, i) in steps" :key="i" :title="s" @click="step = i" />
         </ElSteps>
+
+        <!-- 重新校准提示 -->
+        <div v-if="wasCalibrated" class="calibration-page__recalib-banner">
+            <el-icon class="calibration-page__recalib-icon"><WarningFilled /></el-icon>
+            <span>
+                该传感器已校准。历史校准数据点已加载，可插入或删除数据点后重新计算拟合；确认应用前，现有校准公式不受影响。
+            </span>
+        </div>
 
         <div class="calibration-page__content">
             <!-- ==================== 步骤 1: 采集数据 ==================== -->
@@ -469,6 +480,25 @@ onBeforeUnmount(async () => {
 
 .calibration-page__steps {
     margin-bottom: var(--space-xl);
+}
+
+// ---- 重新校准提示横幅 ----
+.calibration-page__recalib-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-lg);
+    background: var(--banner-bg-warning);
+    color: var(--banner-text-warning);
+    border-radius: var(--card-radius);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.calibration-page__recalib-icon {
+    flex-shrink: 0;
+    font-size: var(--font-size-lg);
 }
 
 .calibration-page__content {

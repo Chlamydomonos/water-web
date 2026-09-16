@@ -137,6 +137,15 @@ function onTabClick(path: string) {
 .top-bar__theme-btn {
     font-size: 18px;
     color: var(--color-text);
+    --el-button-bg-color: var(--card-bg);
+    --el-button-border-color: var(--color-border);
+    --el-button-text-color: var(--color-text);
+    --el-button-hover-bg-color: var(--color-bg-secondary);
+    --el-button-hover-border-color: var(--color-border);
+    --el-button-hover-text-color: var(--color-text);
+    --el-button-active-bg-color: var(--color-bg-secondary);
+    --el-button-active-border-color: var(--color-border);
+    --el-button-active-text-color: var(--color-text);
 
     &:hover {
         background: var(--color-bg-secondary) !important;

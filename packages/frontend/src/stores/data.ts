@@ -21,10 +21,10 @@ export const useDataStore = defineStore('data', () => {
     const clampMoisture = (v: number | null): number | null => (v === null ? null : Math.max(0, Math.min(100, v)));
 
     const chartMoistureSeries = computed(() =>
-        dataBuffer.value.map((d) => [String(d.timestamp), clampMoisture(d.avgMoisture)] as [string, number | null]),
+        dataBuffer.value.map((d) => [d.timestamp, clampMoisture(d.avgMoisture)] as [number, number | null]),
     );
     const chartValveSeries = computed(() =>
-        dataBuffer.value.map((d) => [String(d.timestamp), d.valveState] as [string, 0 | 1]),
+        dataBuffer.value.map((d) => [d.timestamp, d.valveState] as [number, 0 | 1]),
     );
 
     // ---- 操作 ----

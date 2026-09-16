@@ -139,6 +139,17 @@ function goToCalibration(sensorId: number) {
                         </button>
                     </template>
                 </ElTableColumn>
+                <ElTableColumn label="重新校准" width="100" align="center">
+                    <template #default="{ row }">
+                        <button
+                            v-if="(row as SensorDto).calibrated"
+                            class="sensors-page__action-btn"
+                            @click="goToCalibration((row as SensorDto).id)"
+                        >
+                            重新校准
+                        </button>
+                    </template>
+                </ElTableColumn>
                 <ElTableColumn label="操作" width="160">
                     <template #default="{ row }">
                         <div class="sensors-page__actions">

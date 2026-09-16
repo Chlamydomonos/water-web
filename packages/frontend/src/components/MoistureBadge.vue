@@ -6,7 +6,7 @@ defineProps<{
 
 <template>
     <span class="moisture-badge">
-        {{ value !== null ? `${value}%` : 'N/A' }}
+        {{ value !== null ? `${value.toFixed(1)}%` : 'N/A' }}
     </span>
 </template>
 
