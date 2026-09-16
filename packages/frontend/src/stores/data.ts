@@ -5,9 +5,18 @@ import type { DataSnapshot, DataPoint, LatestDataResponse } from 'shared';
 
 export const useDataStore = defineStore('data', () => {
     // ---- 状态 ----
+    /**
+     * 待显示缓冲区: 已接收但尚未到显示时间 (60s 延迟) 的快照。
+     * 后端采集后立即推送，延迟显示逻辑在前端实现。
+     */
+    const pendingBuffer = ref<DataSnapshot[]>([]);
+    /** 已释放 (可显示) 的数据缓冲区 */
     const dataBuffer = ref<DataSnapshot[]>([]);
     const history = ref<DataPoint[]>([]);
     const bufferMaxSize = 300; // 5分钟 × 60秒
+
+    /** 显示延迟 (毫秒): 快照滞后真实时间 60 秒显示 */
+    const DISPLAY_DELAY_MS = 60_000;
 
     // ---- 计算属性 ----
     const latestSnapshot = computed<DataSnapshot | null>(() => {
@@ -40,16 +49,61 @@ export const useDataStore = defineStore('data', () => {
         }
         return map;
     });
+
+    // ---- 内部工具 ----
+    /**
+     * 按时间戳排序并去除重复时间戳的快照 (保留最新收到的)。
+     * 防止 socket 重连补发 / REST 补全与实时推送产生重复数据点。
+     */
+    function sortAndDedupe(snapshots: DataSnapshot[]): DataSnapshot[] {
+        const byTs = new Map<number, DataSnapshot>();
+        for (const snap of snapshots) {
+            byTs.set(snap.timestamp, snap);
+        }
+        return [...byTs.values()].sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    /** 将快照加入待显示缓冲区 (排序 + 去重) */
+    function addToPending(snapshots: DataSnapshot[]) {
+        if (snapshots.length === 0) return;
+        pendingBuffer.value = sortAndDedupe([...pendingBuffer.value, ...snapshots]);
+    }
+
     // ---- 操作 ----
     function pushSnapshot(snapshot: DataSnapshot) {
-        dataBuffer.value.push(snapshot);
+        addToPending([snapshot]);
+    }
+
+    /**
+     * 每秒调用一次: 将到达显示时间的快照从 pendingBuffer 移入 dataBuffer。
+     * 由 App.vue 的定时器驱动，实现图表每秒平滑更新。
+     */
+    function tick() {
+        const now = Date.now();
+        const cutoff = now - DISPLAY_DELAY_MS;
+
+        // 找出所有已到显示时间的快照
+        const ready: DataSnapshot[] = [];
+        const remaining: DataSnapshot[] = [];
+        for (const snap of pendingBuffer.value) {
+            if (snap.timestamp <= cutoff) {
+                ready.push(snap);
+            } else {
+                remaining.push(snap);
+            }
+        }
+        if (ready.length === 0) return;
+
+        pendingBuffer.value = remaining;
+        dataBuffer.value = sortAndDedupe([...dataBuffer.value, ...ready]);
         while (dataBuffer.value.length > bufferMaxSize) {
             dataBuffer.value.shift();
         }
     }
 
     function fillBuffer(snapshots: DataSnapshot[]) {
-        dataBuffer.value = snapshots.slice(-bufferMaxSize);
+        // REST 补全的数据直接进入待显示缓冲区，由 tick 按时间释放
+        addToPending(snapshots);
     }
 
     async function fetchLatest(minutes: number = 5) {
@@ -72,6 +126,7 @@ export const useDataStore = defineStore('data', () => {
 
     return {
         dataBuffer,
+        pendingBuffer,
         history,
         latestSnapshot,
         latestMoisture,
@@ -80,6 +135,7 @@ export const useDataStore = defineStore('data', () => {
         chartValveSeries,
         pushSnapshot,
         fillBuffer,
+        tick,
         fetchLatest,
         fetchHistory,
     };

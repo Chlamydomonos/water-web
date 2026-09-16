@@ -198,7 +198,8 @@ export class DataService {
                 if (pulseCount > 0 && pulseCount < 1500) {
                     moisture = sensor.calibA * Math.log(1000 / pulseCount) + sensor.calibB;
                     if (crc8Valid) {
-                        moistureValues.push(moisture);
+                        // 参与平均计算的数值截断到 [0, 100] 范围内
+                        moistureValues.push(Math.max(0, Math.min(100, moisture)));
                     }
                 }
             }
