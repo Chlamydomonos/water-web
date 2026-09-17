@@ -469,19 +469,20 @@ export class IrrigationTaskService {
                     );
                 }
             } else if (task.state === 'running') {
-                // 停止条件: 高于阈值 → 完成
+                // 停止条件: 高于阈值 → 回到 idle，等待下次湿度跌破 lowThreshold 再触发
                 // 注: 时间窗口仅限制灌溉启动时机，不强制停止已运行的灌溉——
                 //     一旦启动，会持续灌溉直到湿度达标，避免半途灌溉导致土壤干湿交替
+                // 注: 湿度任务是持久化的循环任务，不应标为 completed，否则不会再被调度
                 if (avgMoisture !== null && avgMoisture > config.highThreshold) {
-                    task.state = 'completed';
-                    task.endedAt = new Date();
+                    task.state = 'idle';
+                    task.startedAt = null;
                     await task.save();
                     this.io.emit('task:changed', toTaskDto(task, configDto));
                     console.log(
-                        `[task] humidity #${task.id} completed (moisture ${avgMoisture} > ${config.highThreshold})`,
+                        `[task] humidity #${task.id} back to idle (moisture ${avgMoisture} > ${config.highThreshold})`,
                     );
 
-                    // 湿度任务完成 → 解除 timed 阻塞
+                    // 湿度任务停止灌溉 → 解除 timed 阻塞
                     await this.unblockTimedTasks();
                 }
             } else if (task.state === 'paused') {
