@@ -13,8 +13,8 @@ export const useDataStore = defineStore('data', () => {
     /** 已释放 (可显示) 的数据缓冲区 */
     const dataBuffer = ref<DataSnapshot[]>([]);
     const history = ref<DataPoint[]>([]);
-    // 图表最多显示 5 分钟数据: ESP32 每 30s 采集一次 → 5 分钟 ≈ 10 个快照
-    const bufferMaxSize = 10;
+    // 图表最多显示 5 分钟数据: ESP32 每 1s 采样一次 (后端每 30s 拉取约 30 个点) → 5 分钟 ≈ 300 个快照
+    const bufferMaxSize = 300;
 
     /** 显示延迟 (毫秒): 快照滞后真实时间 60 秒显示 */
     const DISPLAY_DELAY_MS = 60_000;
